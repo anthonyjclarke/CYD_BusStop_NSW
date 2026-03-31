@@ -1,0 +1,5 @@
+.pio/
+secrets.h
+*.bin
+*.elf
+.DS_Store
