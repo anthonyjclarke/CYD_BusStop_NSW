@@ -21,7 +21,7 @@ framework.
 | Component  | Detail                               |
 |:-----------|:-------------------------------------|
 | Board      | ESP32-2432S028R (CYD 2.8")           |
-| Display    | ILI9341 · 240×320 · SPI             |
+| Display    | ILI9341 · 240×320 · SPI              |
 | Touch      | XPT2046 (unused in this project)     |
 | Flash      | 4 MB · custom partition table        |
 | USB–Serial | CP2102                               |
@@ -32,9 +32,24 @@ framework.
 
 ### TfNSW API Key
 
-Register at [opendata.transport.nsw.gov.au](https://opendata.transport.nsw.gov.au)
-and create an application to receive an API key. Add it to `include/secrets.h`
-(see [Configuration](#configuration) below).
+This project uses the **TfNSW Open Data Trip Planner API** (Departure Monitor endpoint).
+
+1. Register at [opendata.transport.nsw.gov.au](https://opendata.transport.nsw.gov.au)
+2. Sign in and go to **My Account → Applications → Add Application**
+3. Give the application a name (e.g. `CYD BusStop`) and request access to the
+   **Trip Planner APIs** product
+4. Once approved (usually instant), copy the API key from the application detail page
+5. Paste it into `include/secrets.h` as `SECRET_TFNSW_API_KEY` (see [Configuration](#configuration))
+
+The key is sent as an HTTP header: `Authorization: apikey <your-key>`.
+Requests are made to:
+
+```
+https://api.transport.nsw.gov.au/v1/tp/departure_mon
+```
+
+The free tier allows sufficient polling for personal/hobbyist use at the 60 s
+interval used here.
 
 ### Toolchain
 

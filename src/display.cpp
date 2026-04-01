@@ -137,3 +137,13 @@ void drawStatusBar(const char* msg, uint16_t colour) {
   tft.setTextColor(colour, COL_STATUS_BG);
   tft.drawString(msg, PAD_X, 222, 2);
 }
+
+void drawLastUpdated(const char* timeStr) {
+  // Sits at y=224–239 — the 16px gap below the last departure row in the
+  // lower panels. Panel fillRect clears this area on every drawAllStops(),
+  // so no background fill is needed here.
+  char buf[12];
+  snprintf(buf, sizeof(buf), "upd %s", timeStr);
+  tft.setTextColor(COL_DATE_FG, COL_BG);
+  tft.drawRightString(buf, 320 - PAD_X, 224, 2);
+}

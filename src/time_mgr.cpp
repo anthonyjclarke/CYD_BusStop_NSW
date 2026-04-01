@@ -41,3 +41,10 @@ const char* getDateStr() {
 time_t getUTCNow() {
   return now();  // ezTime now() returns UTC epoch
 }
+
+char* formatLocalHHMM(time_t epochUTC, char* buf, size_t bufLen) {
+  String t = myTZ.dateTime(epochUTC, UTC_TIME, "H:i");
+  strncpy(buf, t.c_str(), bufLen - 1);
+  buf[bufLen - 1] = '\0';
+  return buf;
+}

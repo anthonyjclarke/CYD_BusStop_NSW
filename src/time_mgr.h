@@ -15,3 +15,7 @@ const char* getDateStr();
 
 // Current UTC epoch — used by bus_api to compute minutes-until departure.
 time_t getUTCNow();
+
+// Format a UTC epoch as local HH:MM (Sydney TZ).
+// Writes into buf (must be >= 6 bytes). Returns buf.
+char* formatLocalHHMM(time_t epochUTC, char* buf, size_t bufLen);

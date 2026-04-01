@@ -204,8 +204,7 @@ bool fetchStop(uint8_t idx) {
     dep.epochUTC     = depEpoch;
     dep.minutesUntil = mins;
 
-    strncpy(dep.clockTime, dtStr + 11, 5);
-    dep.clockTime[5] = '\0';
+    formatLocalHHMM(depEpoch, dep.clockTime, sizeof(dep.clockTime));
 
     const char* routeNum = ev["transportation"]["number"];
     if (routeNum) {

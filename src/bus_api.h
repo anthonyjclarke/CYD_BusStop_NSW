@@ -4,7 +4,7 @@
 
 struct Departure {
   char   route[8];        // e.g. "501"
-  char   clockTime[6];    // e.g. "10:48" — local time from API string
+  char   clockTime[6];    // e.g. "10:48" — local Sydney time, derived from epochUTC
   time_t epochUTC;        // departure time as UTC epoch — recalculate minutes from this
   int    minutesUntil;    // computed from epochUTC; refreshed by recalcMinutes()
   bool   valid;

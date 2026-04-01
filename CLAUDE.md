@@ -21,18 +21,25 @@ Standard CYD pin assignments apply — see global CLAUDE.md.
 
 ## API
 
-- Endpoint: `https://api.transport.nsw.gov.au/v1/tp/departure_mon`
-- Auth header: `Authorization: apikey <key>`
-- Key stored in `include/secrets.h` as `SECRET_TFNSW_API_KEY` (gitignored)
-- Poll interval: 60s, 4 sequential requests per cycle (500ms gap between requests)
-- `&limit=6` in query string — API ignores this, responses are still ~60KB each
-- Responses always use chunked transfer-encoding; `DeChunkStream` in `bus_api.cpp`
-  strips framing so ArduinoJson can stream-parse directly (zero large buffer)
+**Provider:** TfNSW Open Data — Trip Planner APIs (Departure Monitor)
+**Registration:** opendata.transport.nsw.gov.au — sign in → My Account →
+Applications → Add Application → request **Trip Planner APIs** product.
+Key available on the application detail page once approved.
+**Endpoint:** `https://api.transport.nsw.gov.au/v1/tp/departure_mon`
+
+| Detail        | Value                                 |
+|:--------------|:--------------------------------------|
+| Auth header   | `Authorization: apikey <key>`         |
+| Key constant  | `SECRET_TFNSW_API_KEY` in `secrets.h` |
+| Poll interval | 60 s · 4 requests · 500 ms gap        |
+| Response size | ~60 KB per stop (chunked transfer)    |
+| Parsing       | `DeChunkStream` — zero-copy JSON      |
+| Timestamps    | UTC from API; local via `myTZ`        |
 
 ## Module Structure
 
-| File                    | Purpose                                       |
-|:------------------------|:----------------------------------------------|
+| File                    | Purpose                                        |
+|:------------------------|:-----------------------------------------------|
 | `src/main.cpp`          | setup(), loop(), init orchestration            |
 | `src/display.cpp/.h`    | All TFT drawing — header, panels, status bar   |
 | `src/bus_api.cpp/.h`    | TfNSW API fetch, JSON parse, StopData structs  |

@@ -5,6 +5,26 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
 
 ---
 
+## [0.2.2] 2026-04-02
+
+### Added
+- "upd HH:MM" last-fetch indicator — dim grey, bottom-right corner, Font 2.
+  Sits in the 16 px gap (y=224–239) below the last departure row. Redrawn
+  after every `drawAllStops()` call; only changes value on actual API fetch.
+
+---
+
+## [0.2.1] 2026-04-02
+
+### Fixed
+- Bus departure clock times displayed in UTC instead of local Sydney time.
+  TfNSW API returns timestamps in UTC; `clockTime` was extracted directly from
+  the raw ISO string (`dtStr + 11`) giving UTC HH:MM. Fix: derive `clockTime`
+  via `formatLocalHHMM()` which uses ezTime's `myTZ.dateTime(epoch, UTC_TIME)`
+  to convert the stored UTC epoch to AEDT/AEST before display.
+
+---
+
 ## [0.2.0] 2026-04-01
 
 ### Added

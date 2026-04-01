@@ -21,3 +21,7 @@ void drawStopPanel(uint8_t idx);
 
 // Draw a status message at the bottom of the screen (used during init)
 void drawStatusBar(const char* msg, uint16_t colour);
+
+// Draw last-fetch time in dim grey, bottom-right corner ("upd HH:MM").
+// Call after every drawAllStops() — panels clear the area, this repaints it.
+void drawLastUpdated(const char* timeStr);
