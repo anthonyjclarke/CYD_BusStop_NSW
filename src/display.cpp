@@ -109,10 +109,14 @@ void drawStopPanel(uint8_t idx) {
     tft.setTextColor(COL_ROUTE, COL_BG);
     tft.drawString(dep.route, px + PAD_X, rowY, 2);
 
-    // Minutes until — colour-coded
+    // Minutes until — colour-coded, "Now" for 0
     char minsStr[8];
-    snprintf(minsStr, sizeof(minsStr), "%dm", dep.minutesUntil);
-    tft.setTextColor((dep.minutesUntil < 10) ? COL_MINS_NEAR : COL_MINS_FAR, COL_BG);
+    if (dep.minutesUntil <= 0)
+      strncpy(minsStr, "Now", sizeof(minsStr));
+    else
+      snprintf(minsStr, sizeof(minsStr), "%dm", dep.minutesUntil);
+    tft.setTextColor((dep.minutesUntil <= 0) ? TFT_RED
+                     : (dep.minutesUntil < 10) ? COL_MINS_NEAR : COL_MINS_FAR, COL_BG);
     tft.drawString(minsStr, px + PAD_X + 36, rowY, 2);
 
     // Clock time

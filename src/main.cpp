@@ -11,8 +11,9 @@
 #include "bus_api.h"
 #include "web_server.h"
 
-static uint32_t s_lastPoll        = 0;
-static uint32_t s_lastClockUpdate = 0;
+static uint32_t s_lastPoll         = 0;
+static uint32_t s_lastClockUpdate  = 0;
+static uint32_t s_lastPanelRefresh = 0;
 
 // ---------------------------------------------------------------------------
 // Init helpers
@@ -109,9 +110,17 @@ void loop() {
     drawHeader(getTimeStr(), getDateStr());
   }
 
+  // Recalculate minutes + redraw panels every 15s (no API call)
+  if (now - s_lastPanelRefresh >= 15000UL) {
+    s_lastPanelRefresh = now;
+    recalcMinutes();
+    drawAllStops();
+  }
+
   // Full bus API refresh on poll interval
   if (now - s_lastPoll >= POLL_INTERVAL_MS) {
-    s_lastPoll = now;
+    s_lastPoll         = now;
+    s_lastPanelRefresh = now;  // reset so we don't double-draw
     fetchAllStops();
     drawAllStops();
   }

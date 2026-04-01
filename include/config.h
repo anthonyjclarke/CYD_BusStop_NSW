@@ -33,7 +33,8 @@ constexpr const char* TFNSW_API_BASE =
   "&departureMonitorMacro=true"
   "&TfNSWDM=true"
   "&version=10.2.1.42"
-  "&depArr=dep";
+  "&depArr=dep"
+  "&limit=6";   // cap results — keeps response ~5KB vs ~60KB unbounded
 
 constexpr uint32_t POLL_INTERVAL_MS    = 60000;   // 60 s between full refresh cycles
 constexpr uint32_t INTER_REQUEST_MS    = 500;     // gap between sequential stop requests
@@ -46,7 +47,7 @@ constexpr const char* WIFI_AP_NAME = "CYD-BusStop";
 // ---------------------------------------------------------------------------
 // Time
 // ---------------------------------------------------------------------------
-constexpr const char* NTP_SERVER = "pool.ntp.org";
+constexpr const char* NTP_HOST   = "pool.ntp.org";  // renamed — ezTime defines NTP_SERVER as a macro
 constexpr const char* TIMEZONE   = "Australia/Sydney";
 
 // ---------------------------------------------------------------------------
