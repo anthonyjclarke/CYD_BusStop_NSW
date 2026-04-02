@@ -30,7 +30,7 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
   - `initStopConfig()` loads persisted stops from NVS (`Preferences`) or falls
     back to built-in defaults.
   - `stopIds[]/stopNames[]` runtime arrays replace hardcoded `STOP_IDS`/`STOP_NAMES`
-    for fetch/display and API APIs.
+    for fetch/display and API references.
   - `GET /api/stops` returns the current stop id/name array.
   - `POST /api/stops` accepts JSON array to update the stop list (up to
     `STOP_COUNT` entries), persists with `saveStopConfig()`, and triggers
