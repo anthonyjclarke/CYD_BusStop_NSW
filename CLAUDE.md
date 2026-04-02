@@ -1,13 +1,13 @@
-# CYD_BusStop — Project Context
+# CYD_BusStop_NSW — Project Context
 
 ## What It Does
 
 Displays the next 3 bus departures for 4 NSW stops near Ryde/Putney, fetched from the
-TfNSW Trip Planner API. Shows a live time/date header. Configurable via web interface.
+TfNSW Trip Planner API. Shows a live time/date header. Live web dashboard at `/`.
 
 ## Target Hardware
 
-ESP32-2432S028R (CYD 2.8") — ILI9341, 240×320, no PSRAM.
+ESP32-2432S028R (CYD 2.8") — ILI9341, 240x320, no PSRAM.
 Standard CYD pin assignments apply — see global CLAUDE.md.
 
 ## Stop Configuration
@@ -21,24 +21,36 @@ Standard CYD pin assignments apply — see global CLAUDE.md.
 
 ## API
 
-- Endpoint: `https://api.transport.nsw.gov.au/v1/tp/departure_mon`
-- Auth header: `Authorization: apikey <key>`
-- Key stored in `include/secrets.h` as `SECRET_TFNSW_API_KEY` (gitignored)
-- Poll interval: 60s, 4 sequential requests per cycle (500ms gap between requests)
+**Provider:** TfNSW Open Data — Trip Planner APIs (Departure Monitor)
+**Registration:** opendata.transport.nsw.gov.au — sign in → My Account →
+Applications → Add Application → request **Trip Planner APIs** product.
+Key available on the application detail page once approved.
+**Endpoint:** `https://api.transport.nsw.gov.au/v1/tp/departure_mon`
+
+| Detail        | Value                                 |
+|:--------------|:--------------------------------------|
+| Auth header   | `Authorization: apikey <key>`         |
+| Key constant  | `SECRET_TFNSW_API_KEY` in `secrets.h` |
+| Poll interval | 60 s · 4 requests · 500 ms gap        |
+| Response size | ~60 KB per stop (chunked transfer)    |
+| Parsing       | `DeChunkStream` — zero-copy JSON      |
+| Timestamps    | UTC from API; local via `myTZ`        |
 
 ## Module Structure
 
-| File | Purpose |
-|:-----|:--------|
-| `src/main.cpp` | setup(), loop(), init orchestration |
-| `src/display.cpp/.h` | All TFT drawing — header, panels, status bar |
-| `src/bus_api.cpp/.h` | TfNSW API fetch, JSON parse, StopData structs |
-| `src/time_mgr.cpp/.h` | ezTime NTP init, time/date string helpers |
-| `src/web_server.cpp/.h` | AsyncWebServer routes, ElegantOTA, /api/state |
+| File                    | Purpose                                              |
+|:------------------------|:-----------------------------------------------------|
+| `src/main.cpp`          | setup(), loop(), init orchestration                  |
+| `src/display.cpp/.h`    | All TFT drawing — header, panels, status bar         |
+| `src/bus_api.cpp/.h`    | TfNSW API fetch, JSON parse, StopData structs        |
+| `src/time_mgr.cpp/.h`   | ezTime NTP init, time/date string helpers            |
+| `src/web_server.cpp/.h` | AsyncWebServer routes, ArduinoOTA, /api/state        |
+| `src/config.cpp`        | Stop config: NVS load/save/reset, runtime arrays     |
+| `include/config.h`      | All tuneable constants + stop config declarations    |
 
 ## Fonts
 
-Currently using TFT_eSPI built-in fonts:
+Currently using TFT_eSPI built-in fonts (requires `-DLOAD_FONT2=1 -DLOAD_FONT4=1`):
 - Font 4 (26px) — header time
 - Font 2 (16px) — stop names, departure rows, status bar
 
@@ -48,20 +60,51 @@ calls in `display.cpp` for `loadFont` / `drawString` / `unloadFont` pattern.
 
 ## Display Layout
 
-Landscape 320×240. Header 28px, then 2×2 grid of stop panels.
-Each panel: stop name + 3 departure rows (route · Xm · HH:MM).
+Landscape 320x240. Header 28px, then 2x2 grid of stop panels.
+Each panel: stop name + 3 departure rows (route · Xm/Now · HH:MM).
+
+## Refresh Strategy
+
+| What             | Interval | Mechanism                                  |
+|:-----------------|:---------|:-------------------------------------------|
+| TFT clock header | 1s       | ezTime `events()` tick + `drawHeader()`    |
+| TFT stop panels  | 15s      | `recalcMinutes()` from stored epoch + draw |
+| API fetch        | 60s      | `fetchAllStops()` — 4 HTTPS requests       |
+| WebUI minutes    | 15s      | Client-side JS recalc from epoch           |
+| WebUI API poll   | 60s      | `fetch('/api/state')` from browser         |
+
+## Web API Endpoints
+
+| Method | Path              | Description                                          |
+|:-------|:------------------|:-----------------------------------------------------|
+| GET    | `/`               | Live web dashboard — dark theme, JS polling          |
+| GET    | `/api/state`      | JSON: time, date, UTC epoch, all stop departure data |
+| GET    | `/api/stops`      | JSON array of current stop id/name pairs             |
+| POST   | `/api/stops`      | Update stop list (JSON array); persists + refetches  |
+| POST   | `/api/stops/reset`| Restore default stops; persists + refetches          |
+| GET    | `/mirror`         | Redirects to `/`                                     |
 
 ## Build Phases
 
-- **Phase 1 (current)**: WiFi + NTP + API fetch + display — needs TfNSW API key
-- **Phase 2**: Web config page, NVS persistence, full OTA
+- **Phase 1** ✓: WiFi + NTP + API fetch + display + web dashboard + OTA
+- **Phase 2** ✓ (partial): NVS stop config persistence + web stop editor UI
+- **Phase 2** (remaining): Full `/config` page (poll interval, brightness, timezone)
 - **Phase 3**: Canvas display mirror at `/mirror` using `/api/state` JSON
 
 ## Known Issues / Notes
 
-- CYD has no PSRAM — no framebuffer mirror possible; web mirror uses JS canvas
-- `setInsecure()` used on WiFiClientSecure — acceptable for device, not for prod cloud apps
-- `mktime()` on ESP32 Arduino treats struct tm as UTC — parseISODatetime() relies on this
+- CYD has no PSRAM — no framebuffer mirror possible; web mirror will use JS canvas
+- `setInsecure()` used on WiFiClientSecure — acceptable for device, not prod cloud
+- `mktime()` on ESP32 Arduino treats struct tm as UTC — `parseISODatetime()` relies on this
+- TfNSW API ignores `&limit=6` parameter — always returns full result set (~60KB)
+- `DeChunkStream` handles the chunked responses with zero heap buffer overhead
+- Built-in fonts require explicit `-DLOAD_FONT2=1` / `-DLOAD_FONT4=1` in build flags
+- `fetchAllStops()` blocks the loop for ~2s (4 stops × 500ms `delay()` gap) — OTA
+  and web requests are unresponsive during this window
+- Stop config web editor has no client-side validation — server rejects invalid
+  input (length checks) but no UI feedback yet; tracked in CHANGELOG enhancements
+- `TIME_24HR_DEFAULT = false` → header displays 12hr format (e.g. "2:35 PM");
+  set to `true` in `config.h` for 24hr ("14:35")
 
 ## Flashing
 

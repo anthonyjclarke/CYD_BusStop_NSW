@@ -5,7 +5,6 @@
 #include "../include/debug.h"
 
 #include <ESPAsyncWebServer.h>
-#include <ElegantOTA.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
 
@@ -19,17 +18,23 @@ static AsyncWebServer server(WEB_PORT);
 // Returns current time, date, and all stop departure data as JSON.
 // Used by the Phase 3 canvas mirror and any external consumers.
 static void handleApiState(AsyncWebServerRequest* req) {
+  // Recalculate minutes so the JSON always reflects current time
+  recalcMinutes();
+
   DynamicJsonDocument doc(2048);
 
   doc["time"] = getTimeStr();
   doc["date"] = getDateStr();
+  doc["now"]  = (long)getUTCNow();  // UTC epoch for client-side recalc
 
   JsonArray stops = doc.createNestedArray("stops");
   for (uint8_t i = 0; i < STOP_COUNT; i++) {
     JsonObject stop = stops.createNestedObject();
-    stop["id"]    = STOP_IDS[i];
-    stop["name"]  = STOP_NAMES[i];
+    stop["id"]    = stopIds[i];
+    stop["name"]  = stopNames[i];
     stop["valid"] = stopData[i].valid;
+    stop["fetchAge"] = stopData[i].lastFetchMs
+      ? (millis() - stopData[i].lastFetchMs) / 1000 : -1;
 
     JsonArray deps = stop.createNestedArray("departures");
     for (uint8_t j = 0; j < stopData[i].count; j++) {
@@ -38,6 +43,7 @@ static void handleApiState(AsyncWebServerRequest* req) {
       dep["route"]   = d.route;
       dep["clock"]   = d.clockTime;
       dep["minutes"] = d.minutesUntil;
+      dep["epoch"]   = (long)d.epochUTC;
     }
   }
 
@@ -46,42 +52,212 @@ static void handleApiState(AsyncWebServerRequest* req) {
   req->send(200, "application/json", body);
 }
 
-// GET /
-// Phase 2 placeholder — will become the full config page.
-static void handleRoot(AsyncWebServerRequest* req) {
-  String html =
-    "<!DOCTYPE html><html><head>"
-    "<meta charset='utf-8'>"
-    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-    "<title>CYD BusStop</title>"
-    "<style>body{font-family:sans-serif;max-width:480px;margin:2em auto;padding:0 1em}"
-    "a{display:block;margin:.5em 0;padding:.6em 1em;background:#222;color:#fff;"
-    "text-decoration:none;border-radius:4px}</style>"
-    "</head><body>"
-    "<h2>CYD BusStop</h2>"
-    "<a href='/api/state'>Current state (JSON)</a>"
-    "<a href='/mirror'>Display mirror <em>(Phase 3)</em></a>"
-    "<a href='/update'>OTA firmware update</a>"
-    "<p style='color:#999;font-size:.85em'>Config page coming in Phase 2.</p>"
-    "</body></html>";
+// GET /api/stops
+static void handleApiStops(AsyncWebServerRequest* req) {
+  DynamicJsonDocument doc(1024);
+  JsonArray stops = doc.to<JsonArray>();
 
-  req->send(200, "text/html", html);
+  for (uint8_t i = 0; i < STOP_COUNT; i++) {
+    JsonObject stop = stops.createNestedObject();
+    stop["id"]   = stopIds[i];
+    stop["name"] = stopNames[i];
+  }
+
+  String body;
+  serializeJson(doc, body);
+  req->send(200, "application/json", body);
 }
 
-// GET /mirror
-// Phase 3 placeholder — will render a JS canvas that mirrors the TFT layout.
-static void handleMirror(AsyncWebServerRequest* req) {
-  String html =
-    "<!DOCTYPE html><html><head>"
-    "<meta charset='utf-8'>"
-    "<title>Display Mirror</title>"
-    "</head><body style='background:#000;color:#fff;font-family:monospace'>"
-    "<h3>Display mirror — Phase 3</h3>"
-    "<p>Will poll <a href='/api/state' style='color:#0cf'>/api/state</a> "
-    "and render a canvas replicating the TFT layout.</p>"
-    "</body></html>";
+static void handleApiStopsUpdate(AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+  DynamicJsonDocument doc(2048);
+  DeserializationError err = deserializeJson(doc, data, len);
+  if (err) {
+    DBG_WARN("/api/stops POST JSON parse failed: %s", err.c_str());
+    req->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
 
-  req->send(200, "text/html", html);
+  if (!doc.is<JsonArray>()) {
+    req->send(400, "application/json", "{\"error\":\"Expected JSON array\"}");
+    return;
+  }
+
+  JsonArray arr = doc.as<JsonArray>();
+  if (arr.size() > STOP_COUNT) {
+    req->send(400, "application/json", "{\"error\":\"Too many stops\"}");
+    return;
+  }
+
+  for (uint8_t i = 0; i < STOP_COUNT; i++) {
+    if (i < arr.size()) {
+      JsonObject obj = arr[i].as<JsonObject>();
+      const char* id = obj["id"];
+      const char* name = obj["name"];
+      if (!id || !name || strlen(id) == 0 || strlen(name) == 0 || strlen(id) >= STOP_ID_MAX || strlen(name) >= STOP_NAME_MAX) {
+        req->send(400, "application/json", "{\"error\":\"Invalid stop id/name\"}");
+        return;
+      }
+      setStopConfig(i, id, name);
+    } else {
+      // If fewer entries, keep existing or defaults. Keep previous values.
+    }
+  }
+
+  if (!saveStopConfig()) {
+    DBG_WARN("/api/stops POST: saveStopConfig failed");
+  }
+
+  fetchAllStops();
+
+  req->send(200, "application/json", "{\"result\":\"ok\"}");
+}
+
+// GET /
+// Dashboard — polls /api/state every 60s, recalculates minutes every 15s client-side.
+static const char ROOT_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CYD BusStop</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,sans-serif;background:#111;color:#fff;padding:1em;max-width:480px;margin:0 auto}
+h1{font-size:1.2em;margin-bottom:.15em}
+.hdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.6em}
+.ts{color:#888;font-size:.85em}
+.upd{color:#555;font-size:.75em}
+.stop{background:#1a1a1a;border-radius:6px;padding:.6em .8em;margin-bottom:.5em}
+.sn{color:#0cf;font-weight:700;margin-bottom:.3em}
+.dep{display:flex;gap:.8em;padding:.1em 0;font-size:.9em}
+.rt{min-width:3em;font-weight:600}
+.mn{min-width:3em;text-align:right}
+.near{color:#0f0}.far{color:#ff0}.gone{color:#f44}
+.ck{color:#aaa}
+.nd{color:#555;font-style:italic;font-size:.85em}
+.ft{margin-top:.8em;font-size:.75em;color:#444;text-align:center}
+.ft a{color:#0cf;text-decoration:none}
+</style></head><body>
+<h1>Bus Departures</h1>
+<div class="hdr"><span class="ts" id="clock">--</span><span class="upd" id="upd">--</span></div>
+<div id="stops">Loading...</div>
+<div class="ft"><a href="/api/state">JSON</a></div>
+<div class="ft"><button id="btnToggleEdit" onclick="toggleEditPane()">Edit stops</button></div>
+<div id="stopConfig" style="display:none;margin-top:.8em;background:#222;border:1px solid #444;border-radius:6px;padding:.8em;">
+  <h2 style="font-size:1em;margin-bottom:.4em;">Edit stops</h2>
+  <div id="stopConfigRows"></div>
+  <div style="margin-top:.5em;display:flex;gap:.5em;align-items:center;">
+    <button onclick="saveStopConfig()">Save</button>
+    <button onclick="resetStopConfig()">Reset defaults</button>
+    <span id="configStatus" style="color:#8f8;font-size:.85em;"></span>
+  </div>
+</div>
+<script>
+var D=null,fetched=0,stopsConfig=[];
+function toggleEditPane(){
+  var pane=document.getElementById('stopConfig');
+  pane.style.display = (pane.style.display==='none'?'block':'none');
+}
+function renderStopConfigRows(){
+  var rows=document.getElementById('stopConfigRows');
+  if (!Array.isArray(stopsConfig) || stopsConfig.length===0) {
+    rows.innerHTML='<div class="nd">No stop data</div>';
+    return;
+  }
+  var h='';
+  stopsConfig.forEach(function(s,i){
+    h += '<div style="margin-bottom:.4em;display:flex;gap:.4em;align-items:center;">';
+    h += '<input id="stopId'+i+'" style="flex:1;" value="'+(s.id||'')+'" placeholder="Stop ID">';
+    h += '<input id="stopName'+i+'" style="flex:2;" value="'+(s.name||'')+'" placeholder="Stop name">';
+    h += '</div>';
+  });
+  rows.innerHTML = h;
+}
+function loadStopConfig(){
+  fetch('/api/stops').then(function(r){return r.json();}).then(function(arr){
+    stopsConfig = arr;
+    renderStopConfigRows();
+  }).catch(function(err){
+    document.getElementById('configStatus').textContent='Load failed';
+    console.warn(err);
+  });
+}
+function saveStopConfig(){
+  var payload=[];
+  for(var i=0;i<stopsConfig.length;i++){
+    var idInput=document.getElementById('stopId'+i);
+    var nameInput=document.getElementById('stopName'+i);
+    if (!idInput || !nameInput) continue;
+    payload.push({id:idInput.value.trim(),name:nameInput.value.trim()});
+  }
+  fetch('/api/stops',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+  .then(function(){
+    document.getElementById('configStatus').textContent='Saved';
+    loadStopConfig();
+    fetchAndRender();
+  }).catch(function(e){
+    document.getElementById('configStatus').textContent='Save failed';
+    console.warn(e);
+  });
+}
+function resetStopConfig(){
+  fetch('/api/stops/reset',{method:'POST'})
+  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+  .then(function(){
+    document.getElementById('configStatus').textContent='Reset';
+    loadStopConfig();
+    fetchAndRender();
+  }).catch(function(e){
+    document.getElementById('configStatus').textContent='Reset failed';
+    console.warn(e);
+  });
+}
+function fetchAndRender(){
+  fetch('/api/state').then(function(r){return r.json();}).then(function(d){
+    D=d;fetched=Date.now();render();
+  }).catch(function(){
+  });
+}
+function render(){
+  if(!D)return;
+  document.getElementById('clock').textContent=D.time+'  '+D.date;
+  var age=Math.round((Date.now()-fetched)/1000);
+  document.getElementById('upd').textContent='Updated '+age+'s ago';
+  var nowUTC=D.now+age;
+  var h='';
+  D.stops.forEach(function(s){
+    h+='<div class="stop"><div class="sn">'+s.name+'</div>';
+    if(!s.valid||!s.departures.length){h+='<div class="nd">No data</div>';}
+    else s.departures.forEach(function(d){
+      var m=Math.round((d.epoch-nowUTC)/60);
+      var cls=m<=0?'gone':m<10?'near':'far';
+      var label=m<0?'Gone':m==0?'Now':m+'m';
+      h+='<div class="dep"><span class="rt">'+d.route+'</span>'
+        +'<span class="mn '+cls+'">'+label+'</span>'
+        +'<span class="ck">'+d.clock+'</span></div>';
+    });
+    h+='</div>';
+  });
+  document.getElementById('stops').innerHTML=h;
+}
+function poll(){
+  fetchAndRender();
+}
+
+loadStopConfig();
+poll();
+setInterval(poll,60000);
+setInterval(render,15000);
+</script>
+</body></html>)rawliteral";
+
+static void handleRoot(AsyncWebServerRequest* req) {
+  req->send(200, "text/html", ROOT_HTML);
+}
+
+// GET /mirror — redirect to root (now serves live data)
+static void handleMirror(AsyncWebServerRequest* req) {
+  req->redirect("/");
 }
 
 // ---------------------------------------------------------------------------
@@ -91,15 +267,23 @@ static void handleMirror(AsyncWebServerRequest* req) {
 void initWebServer() {
   server.on("/",          HTTP_GET, handleRoot);
   server.on("/api/state", HTTP_GET, handleApiState);
+  server.on("/api/stops", HTTP_GET, handleApiStops);
+  server.on("/api/stops", HTTP_POST, [](AsyncWebServerRequest* req){}, nullptr, handleApiStopsUpdate);
+  server.on("/api/stops/reset", HTTP_POST, [](AsyncWebServerRequest* req){
+    if (!resetStopConfig() || !saveStopConfig()) {
+      req->send(500, "application/json", "{\"error\":\"reset failed\"}");
+      return;
+    }
+    fetchAllStops();
+    req->send(200, "application/json", "{\"result\":\"reset\"}");
+  });
   server.on("/mirror",    HTTP_GET, handleMirror);
-
-  // ElegantOTA attaches /update and /update/identity routes
-  ElegantOTA.begin(&server);
 
   server.begin();
   DBG_INFO("Web server started — http://%s/", WiFi.localIP().toString().c_str());
 }
 
 void handleWebServer() {
-  ElegantOTA.loop();  // required for OTA progress callbacks
+  // AsyncWebServer handles requests via interrupt — nothing needed here.
+  // ArduinoOTA is handled in loop() via main.cpp.
 }

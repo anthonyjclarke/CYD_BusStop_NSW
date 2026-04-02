@@ -11,8 +11,10 @@
 #include "bus_api.h"
 #include "web_server.h"
 
-static uint32_t s_lastPoll        = 0;
-static uint32_t s_lastClockUpdate = 0;
+static uint32_t s_lastPoll         = 0;
+static uint32_t s_lastClockUpdate  = 0;
+static uint32_t s_lastPanelRefresh = 0;
+static char     s_lastFetchStr[6]  = "--:--";  // local HH:MM of last API fetch
 
 // ---------------------------------------------------------------------------
 // Init helpers
@@ -78,16 +80,19 @@ void setup() {
   drawStatusBar("Syncing time...", TFT_YELLOW);
   initTime();
 
+  initStopConfig();
   initBusApi();
   initWebServer();
   initOTA();
 
   drawStatusBar("Fetching buses...", TFT_YELLOW);
   fetchAllStops();
+  formatLocalHHMM(getUTCNow(), s_lastFetchStr, sizeof(s_lastFetchStr));
 
   // Initial full draw
   drawHeader(getTimeStr(), getDateStr());
   drawAllStops();
+  drawLastUpdated(s_lastFetchStr);
 
   s_lastPoll        = millis();
   s_lastClockUpdate = millis();
@@ -109,10 +114,21 @@ void loop() {
     drawHeader(getTimeStr(), getDateStr());
   }
 
+  // Recalculate minutes + redraw panels every 15s (no API call)
+  if (now - s_lastPanelRefresh >= 15000UL) {
+    s_lastPanelRefresh = now;
+    recalcMinutes();
+    drawAllStops();
+    drawLastUpdated(s_lastFetchStr);
+  }
+
   // Full bus API refresh on poll interval
   if (now - s_lastPoll >= POLL_INTERVAL_MS) {
-    s_lastPoll = now;
+    s_lastPoll         = now;
+    s_lastPanelRefresh = now;  // reset so we don't double-draw
     fetchAllStops();
+    formatLocalHHMM(getUTCNow(), s_lastFetchStr, sizeof(s_lastFetchStr));
     drawAllStops();
+    drawLastUpdated(s_lastFetchStr);
   }
 }

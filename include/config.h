@@ -1,24 +1,42 @@
 #pragma once
 
+#include <Arduino.h>
+
 // ---------------------------------------------------------------------------
 // Stop configuration
 // ---------------------------------------------------------------------------
 constexpr uint8_t     STOP_COUNT          = 4;
 constexpr uint8_t     DEPARTURES_PER_STOP = 3;
 
-constexpr const char* STOP_IDS[STOP_COUNT] = {
+constexpr uint8_t STOP_ID_MAX   = 16;
+constexpr uint8_t STOP_NAME_MAX = 24;
+
+constexpr const char* const STOP_IDS_DEFAULT[STOP_COUNT] = {
   "2112130",  // To Gladesville
   "2112131",  // To Meadowbank
   "211267",   // End of Small St
   "211271"    // To Macquarie
 };
 
-constexpr const char* STOP_NAMES[STOP_COUNT] = {
+constexpr const char* const STOP_NAMES_DEFAULT[STOP_COUNT] = {
   "To Gladesville",
   "To Meadowbank",
   "End of Small St",
   "To Macquarie"
 };
+
+extern char stopIds[STOP_COUNT][STOP_ID_MAX];
+extern char stopNames[STOP_COUNT][STOP_NAME_MAX];
+
+void initStopConfig();
+
+bool setStopConfig(uint8_t idx, const char* stopId, const char* stopName);
+
+bool saveStopConfig();
+
+bool loadStopConfig();
+
+bool resetStopConfig();
 
 // ---------------------------------------------------------------------------
 // TfNSW API
@@ -33,7 +51,8 @@ constexpr const char* TFNSW_API_BASE =
   "&departureMonitorMacro=true"
   "&TfNSWDM=true"
   "&version=10.2.1.42"
-  "&depArr=dep";
+  "&depArr=dep"
+  "&limit=6";   // cap results — keeps response ~5KB vs ~60KB unbounded
 
 constexpr uint32_t POLL_INTERVAL_MS    = 60000;   // 60 s between full refresh cycles
 constexpr uint32_t INTER_REQUEST_MS    = 500;     // gap between sequential stop requests
@@ -46,7 +65,7 @@ constexpr const char* WIFI_AP_NAME = "CYD-BusStop";
 // ---------------------------------------------------------------------------
 // Time
 // ---------------------------------------------------------------------------
-constexpr const char* NTP_SERVER = "pool.ntp.org";
+constexpr const char* NTP_HOST   = "pool.ntp.org";  // renamed — ezTime defines NTP_SERVER as a macro
 constexpr const char* TIMEZONE   = "Australia/Sydney";
 
 // ---------------------------------------------------------------------------
