@@ -249,3 +249,142 @@ void recalcMinutes() {
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Diagnostic fetch — compile with -DDIAG_FETCH=1, remove flag after use
+// ---------------------------------------------------------------------------
+#ifdef DIAG_FETCH
+void diagFetchStop(uint8_t idx) {
+  if (idx >= STOP_COUNT || WiFi.status() != WL_CONNECTED) return;
+
+  DBG_INFO("=== DIAG FETCH: stop[%d] id=%s ===", idx, stopIds[idx]);
+  DBG_INFO("    Heap before: %u bytes", ESP.getFreeHeap());
+
+  String url = TFNSW_API_BASE;
+  url += "&name_dm=";
+  url += stopIds[idx];
+
+  // Explicit field filter — same pattern as production fetchStop().
+  // Captures every candidate field we may want to use, across all events,
+  // without pulling coordinates, colours, or other bulk fields.
+  // This keeps the parsed doc small enough to fit in available heap.
+  StaticJsonDocument<512> filter;
+  filter["stopEvents"][0]["isRealtimeControlled"]              = true;
+  filter["stopEvents"][0]["occupancy"]                         = true;
+  filter["stopEvents"][0]["departureTimePlanned"]              = true;
+  filter["stopEvents"][0]["departureTimeEstimated"]            = true;
+  filter["stopEvents"][0]["transportation"]["number"]          = true;
+  filter["stopEvents"][0]["transportation"]["name"]            = true;
+  filter["stopEvents"][0]["transportation"]["description"]     = true;
+  filter["stopEvents"][0]["transportation"]["destination"]["name"] = true;
+  filter["stopEvents"][0]["transportation"]["origin"]["name"]  = true;
+  filter["stopEvents"][0]["transportation"]["operator"]["name"]= true;
+  filter["stopEvents"][0]["transportation"]["product"]["name"] = true;
+  filter["stopEvents"][0]["transportation"]["product"]["class"]= true;
+  filter["stopEvents"][0]["transportation"]["product"]["iconId"] = true;
+  filter["stopEvents"][0]["location"]["name"]                  = true;
+  filter["stopEvents"][0]["location"]["platformName"]          = true;
+  filter["stopEvents"][0]["properties"]["WheelchairAccess"]    = true;
+  filter["stopEvents"][0]["infos"][0]["priority"]              = true;
+  filter["stopEvents"][0]["infos"][0]["subtitle"]              = true;
+  filter["stopEvents"][0]["infos"][0]["content"]               = true;
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.begin(client, url);
+  http.addHeader("Authorization", "apikey " SECRET_TFNSW_API_KEY);
+  http.setTimeout(15000);
+
+  int code = http.GET();
+  if (code != HTTP_CODE_OK) {
+    DBG_WARN("DIAG: HTTP %d", code);
+    http.end();
+    return;
+  }
+
+  bool chunked = (http.getSize() < 0);
+  DynamicJsonDocument doc(4096);
+  DeserializationError err;
+
+  if (chunked) {
+    DeChunkStream dcs(http.getStream());
+    err = deserializeJson(doc, dcs, DeserializationOption::Filter(filter));
+  } else {
+    err = deserializeJson(doc, http.getStream(),
+                          DeserializationOption::Filter(filter));
+  }
+  http.end();
+
+  if (err) {
+    DBG_ERROR("DIAG: parse error: %s (heap: %u)", err.c_str(), ESP.getFreeHeap());
+    return;
+  }
+
+  JsonObject ev = doc["stopEvents"][0];
+  if (ev.isNull()) {
+    DBG_WARN("DIAG: stopEvents[0] absent");
+    return;
+  }
+
+  // --- Candidate fields for Phase 2 ---
+  Serial.println("[DIAG] Candidate field values:");
+
+  auto present = [&](const char* label, JsonVariant v) {
+    if (v.isNull() || v.isUnbound()) {
+      Serial.printf("  %-40s (absent)\n", label);
+    } else {
+      Serial.printf("  %-40s = %s\n", label, v.as<String>().c_str());
+    }
+  };
+
+  present("isRealtimeControlled",             ev["isRealtimeControlled"]);
+  present("occupancy",                        ev["occupancy"]);
+  present("departureTimePlanned",             ev["departureTimePlanned"]);
+  present("departureTimeEstimated",           ev["departureTimeEstimated"]);
+
+  JsonObject trans = ev["transportation"];
+  if (!trans.isNull()) {
+    present("transportation.number",          trans["number"]);
+    present("transportation.name",            trans["name"]);
+    present("transportation.description",     trans["description"]);
+    present("transportation.destination.name",trans["destination"]["name"]);
+    present("transportation.origin.name",     trans["origin"]["name"]);
+    present("transportation.operator.name",   trans["operator"]["name"]);
+    present("transportation.product.name",    trans["product"]["name"]);
+    present("transportation.product.class",   trans["product"]["class"]);
+    present("transportation.product.iconId",  trans["product"]["iconId"]);
+  } else {
+    Serial.println("  transportation                           (absent)");
+  }
+
+  JsonObject loc = ev["location"];
+  if (!loc.isNull()) {
+    present("location.name",                  loc["name"]);
+    present("location.platformName",          loc["platformName"]);
+  }
+
+  JsonObject props = ev["properties"];
+  if (!props.isNull()) {
+    present("properties.WheelchairAccess",    props["WheelchairAccess"]);
+  }
+
+  JsonArray infos = ev["infos"].as<JsonArray>();
+  if (!infos.isNull() && infos.size() > 0) {
+    Serial.printf("  infos[] — %d entr%s\n",
+                  infos.size(), infos.size() == 1 ? "y" : "ies");
+    present("infos[0].priority",              infos[0]["priority"]);
+    present("infos[0].subtitle",              infos[0]["subtitle"]);
+    present("infos[0].content",               infos[0]["content"]);
+  } else {
+    Serial.println("  infos[]                                  (empty / absent)");
+  }
+
+  // --- Full raw serialisation — catches any unlisted fields ---
+  Serial.println("[DIAG] Full raw stopEvents[0]:");
+  serializeJsonPretty(ev, Serial);  // streams directly to Serial — no String heap alloc
+  Serial.println();
+
+  DBG_INFO("=== DIAG FETCH done. Heap: %u bytes ===", ESP.getFreeHeap());
+}
+#endif
