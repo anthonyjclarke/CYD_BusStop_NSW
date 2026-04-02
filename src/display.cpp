@@ -91,7 +91,7 @@ void drawStopPanel(uint8_t idx) {
 
   // Stop name — Font 2, cyan
   tft.setTextColor(COL_STOP_NAME, COL_BG);
-  tft.drawString(STOP_NAMES[idx], px + PAD_X, py + 2, 2);
+  tft.drawString(stopNames[idx], px + PAD_X, py + 2, 2);
 
   const StopData& sd = stopData[idx];
 

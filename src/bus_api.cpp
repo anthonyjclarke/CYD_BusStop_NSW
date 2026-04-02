@@ -128,7 +128,7 @@ bool fetchStop(uint8_t idx) {
   // Build URL
   String url = TFNSW_API_BASE;
   url += "&name_dm=";
-  url += STOP_IDS[idx];
+  url += stopIds[idx];
 
   // Filter — ArduinoJson reads the full stream but only stores these fields.
   StaticJsonDocument<384> filter;
@@ -157,9 +157,10 @@ bool fetchStop(uint8_t idx) {
            idx, chunked ? "chunked" : String(String(contentLen) + " bytes").c_str(),
            ESP.getFreeHeap());
 
-  // Parse JSON directly from the network stream — only the filter doc (4KB)
-  // and the TLS buffers are in memory.  No large response buffer needed.
-  DynamicJsonDocument doc(4096);
+  // Parse JSON directly from the network stream — only filter doc + TLS buffers
+  // are in memory.  Increase buffer in case API is larger than expected.
+  const size_t JSON_DOC_SIZE = 8192;
+  DynamicJsonDocument doc(JSON_DOC_SIZE);
   DeserializationError err;
 
   if (chunked) {
@@ -219,7 +220,7 @@ bool fetchStop(uint8_t idx) {
   stopData[idx].valid       = (count > 0);
   stopData[idx].lastFetchMs = millis();
 
-  DBG_INFO("Stop %s — %d departure(s):", STOP_NAMES[idx], count);
+  DBG_INFO("Stop %s — %d departure(s):", stopNames[idx], count);
   for (uint8_t i = 0; i < count; i++) {
     const Departure& d = stopData[idx].departures[i];
     DBG_INFO("  [%d] Route %-6s  %dm  %s", i + 1, d.route, d.minutesUntil, d.clockTime);

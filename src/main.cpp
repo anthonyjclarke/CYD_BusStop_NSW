@@ -80,6 +80,7 @@ void setup() {
   drawStatusBar("Syncing time...", TFT_YELLOW);
   initTime();
 
+  initStopConfig();
   initBusApi();
   initWebServer();
   initOTA();

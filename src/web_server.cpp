@@ -30,8 +30,8 @@ static void handleApiState(AsyncWebServerRequest* req) {
   JsonArray stops = doc.createNestedArray("stops");
   for (uint8_t i = 0; i < STOP_COUNT; i++) {
     JsonObject stop = stops.createNestedObject();
-    stop["id"]    = STOP_IDS[i];
-    stop["name"]  = STOP_NAMES[i];
+    stop["id"]    = stopIds[i];
+    stop["name"]  = stopNames[i];
     stop["valid"] = stopData[i].valid;
     stop["fetchAge"] = stopData[i].lastFetchMs
       ? (millis() - stopData[i].lastFetchMs) / 1000 : -1;
@@ -50,6 +50,66 @@ static void handleApiState(AsyncWebServerRequest* req) {
   String body;
   serializeJson(doc, body);
   req->send(200, "application/json", body);
+}
+
+// GET /api/stops
+static void handleApiStops(AsyncWebServerRequest* req) {
+  DynamicJsonDocument doc(1024);
+  JsonArray stops = doc.to<JsonArray>();
+
+  for (uint8_t i = 0; i < STOP_COUNT; i++) {
+    JsonObject stop = stops.createNestedObject();
+    stop["id"]   = stopIds[i];
+    stop["name"] = stopNames[i];
+  }
+
+  String body;
+  serializeJson(doc, body);
+  req->send(200, "application/json", body);
+}
+
+static void handleApiStopsUpdate(AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+  DynamicJsonDocument doc(2048);
+  DeserializationError err = deserializeJson(doc, data, len);
+  if (err) {
+    DBG_WARN("/api/stops POST JSON parse failed: %s", err.c_str());
+    req->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+
+  if (!doc.is<JsonArray>()) {
+    req->send(400, "application/json", "{\"error\":\"Expected JSON array\"}");
+    return;
+  }
+
+  JsonArray arr = doc.as<JsonArray>();
+  if (arr.size() > STOP_COUNT) {
+    req->send(400, "application/json", "{\"error\":\"Too many stops\"}");
+    return;
+  }
+
+  for (uint8_t i = 0; i < STOP_COUNT; i++) {
+    if (i < arr.size()) {
+      JsonObject obj = arr[i].as<JsonObject>();
+      const char* id = obj["id"];
+      const char* name = obj["name"];
+      if (!id || !name || strlen(id) == 0 || strlen(name) == 0 || strlen(id) >= STOP_ID_MAX || strlen(name) >= STOP_NAME_MAX) {
+        req->send(400, "application/json", "{\"error\":\"Invalid stop id/name\"}");
+        return;
+      }
+      setStopConfig(i, id, name);
+    } else {
+      // If fewer entries, keep existing or defaults. Keep previous values.
+    }
+  }
+
+  if (!saveStopConfig()) {
+    DBG_WARN("/api/stops POST: saveStopConfig failed");
+  }
+
+  fetchAllStops();
+
+  req->send(200, "application/json", "{\"result\":\"ok\"}");
 }
 
 // GET /
@@ -132,6 +192,16 @@ static void handleMirror(AsyncWebServerRequest* req) {
 void initWebServer() {
   server.on("/",          HTTP_GET, handleRoot);
   server.on("/api/state", HTTP_GET, handleApiState);
+  server.on("/api/stops", HTTP_GET, handleApiStops);
+  server.on("/api/stops", HTTP_POST, [](AsyncWebServerRequest* req){}, nullptr, handleApiStopsUpdate);
+  server.on("/api/stops/reset", HTTP_POST, [](AsyncWebServerRequest* req){
+    if (!resetStopConfig() || !saveStopConfig()) {
+      req->send(500, "application/json", "{\"error\":\"reset failed\"}");
+      return;
+    }
+    fetchAllStops();
+    req->send(200, "application/json", "{\"result\":\"reset\"}");
+  });
   server.on("/mirror",    HTTP_GET, handleMirror);
 
   server.begin();
