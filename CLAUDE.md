@@ -38,13 +38,15 @@ Key available on the application detail page once approved.
 
 ## Module Structure
 
-| File                    | Purpose                                        |
-|:------------------------|:-----------------------------------------------|
-| `src/main.cpp`          | setup(), loop(), init orchestration            |
-| `src/display.cpp/.h`    | All TFT drawing — header, panels, status bar   |
-| `src/bus_api.cpp/.h`    | TfNSW API fetch, JSON parse, StopData structs  |
-| `src/time_mgr.cpp/.h`   | ezTime NTP init, time/date string helpers      |
-| `src/web_server.cpp/.h` | AsyncWebServer routes, ArduinoOTA, /api/state  |
+| File                    | Purpose                                              |
+|:------------------------|:-----------------------------------------------------|
+| `src/main.cpp`          | setup(), loop(), init orchestration                  |
+| `src/display.cpp/.h`    | All TFT drawing — header, panels, status bar         |
+| `src/bus_api.cpp/.h`    | TfNSW API fetch, JSON parse, StopData structs        |
+| `src/time_mgr.cpp/.h`   | ezTime NTP init, time/date string helpers            |
+| `src/web_server.cpp/.h` | AsyncWebServer routes, ArduinoOTA, /api/state        |
+| `src/config.cpp`        | Stop config: NVS load/save/reset, runtime arrays     |
+| `include/config.h`      | All tuneable constants + stop config declarations    |
 
 ## Fonts
 
@@ -71,10 +73,22 @@ Each panel: stop name + 3 departure rows (route · Xm/Now · HH:MM).
 | WebUI minutes    | 15s      | Client-side JS recalc from epoch           |
 | WebUI API poll   | 60s      | `fetch('/api/state')` from browser         |
 
+## Web API Endpoints
+
+| Method | Path              | Description                                          |
+|:-------|:------------------|:-----------------------------------------------------|
+| GET    | `/`               | Live web dashboard — dark theme, JS polling          |
+| GET    | `/api/state`      | JSON: time, date, UTC epoch, all stop departure data |
+| GET    | `/api/stops`      | JSON array of current stop id/name pairs             |
+| POST   | `/api/stops`      | Update stop list (JSON array); persists + refetches  |
+| POST   | `/api/stops/reset`| Restore default stops; persists + refetches          |
+| GET    | `/mirror`         | Redirects to `/`                                     |
+
 ## Build Phases
 
-- **Phase 1 (current)**: WiFi + NTP + API fetch + display + web dashboard + OTA
-- **Phase 2**: Web config page, NVS persistence
+- **Phase 1** ✓: WiFi + NTP + API fetch + display + web dashboard + OTA
+- **Phase 2** ✓ (partial): NVS stop config persistence + web stop editor UI
+- **Phase 2** (remaining): Full `/config` page (poll interval, brightness, timezone)
 - **Phase 3**: Canvas display mirror at `/mirror` using `/api/state` JSON
 
 ## Known Issues / Notes
@@ -85,6 +99,12 @@ Each panel: stop name + 3 departure rows (route · Xm/Now · HH:MM).
 - TfNSW API ignores `&limit=6` parameter — always returns full result set (~60KB)
 - `DeChunkStream` handles the chunked responses with zero heap buffer overhead
 - Built-in fonts require explicit `-DLOAD_FONT2=1` / `-DLOAD_FONT4=1` in build flags
+- `fetchAllStops()` blocks the loop for ~2s (4 stops × 500ms `delay()` gap) — OTA
+  and web requests are unresponsive during this window
+- Stop config web editor has no client-side validation — server rejects invalid
+  input (length checks) but no UI feedback yet; tracked in CHANGELOG enhancements
+- `TIME_24HR_DEFAULT = false` → header displays 12hr format (e.g. "2:35 PM");
+  set to `true` in `config.h` for 24hr ("14:35")
 
 ## Flashing
 

@@ -20,6 +20,33 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
   portability and ease of manual editing.
 - Add a dedicated `/config` page in WebUI for full device settings (poll
   interval, display brightness, timezone, etc.)
+- Add full config page in WebUI, including system diagnostics
+
+### Code optimisations
+
+- Replace `delay(1)` with `yield()` in `DeChunkStream::_timedRead()` — keeps
+  the WiFi/lwIP stack alive during byte-by-byte stream reads; `delay(1)`
+  blocks FreeRTOS for a full tick on every byte of a ~60KB response.
+- Replace `DynamicJsonDocument(8192)` in `fetchStop()` with
+  `StaticJsonDocument<4096>` — the ArduinoJson filter limits the parsed tree
+  to 3 fields × 3 departures; heap-allocating and freeing 8KB four times per
+  poll cycle causes fragmentation (history: stops 3–4 `IncompleteInput` bug).
+- Fix vertical divider overdraw in `drawDividers()`: `drawFastVLine(PANEL_W,
+  HEADER_H, 240, ...)` draws 28px past the bottom of the 240px screen —
+  length should be `240 - HEADER_H` (212). Silent clip from ILI9341, but
+  wastes SPI bandwidth on every `drawAllStops()` call.
+- Replace `DynamicJsonDocument` in `handleApiState()` (2048) and
+  `handleApiStops()` (1024) with `StaticJsonDocument` equivalents — both are
+  called on every browser poll; heap churn accumulates across multiple open tabs.
+- Replace heap-allocated `String` returns from `stopIdKey()` / `stopNameKey()`
+  in `config.cpp` with stack `char` buffers via `snprintf` — called in a loop
+  on every NVS save/load, each allocates on the heap unnecessarily.
+- Fix double-`String` construction in `bus_api.cpp` fetch log line:
+  `String(String(contentLen) + " bytes")` allocates two objects; use `%d`
+  format directly with `contentLen`.
+- Move `fetchAllStops()` to a FreeRTOS task (Phase 3) — currently blocks the
+  main loop for ~2s (4 stops × 500ms `delay()` gap), leaving OTA and web
+  requests unresponsive during each 60s poll cycle.
 
 ---
 

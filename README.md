@@ -1,8 +1,6 @@
-# CYD_BusStop
+# CYD_BusStop_NSW
 
-ESP32 bus stop notifier for the **ESP32-2432S028R (CYD 2.8")** displaying live NSW
-bus departures for four stops near Ryde/Putney. Built with PlatformIO and the Arduino
-framework.
+ESP32 bus stop notifier for the **ESP32-2432S028R (CYD 2.8")** displaying live NSW bus departures for four stops near Ryde/Putney (although these are easily changed). Built with PlatformIO and the Arduino framework.
 
 ---
 
