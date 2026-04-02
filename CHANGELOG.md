@@ -5,6 +5,24 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
 
 ---
 
+## Things to do / Enhancements
+
+- Add client-side validation for stop ID (numeric only, max length) and stop
+  name length before submitting.
+- Support adding/removing stops dynamically (up to `STOP_COUNT`) in the UI and
+  potentially in runtime config.
+- Add UI feedback on validation errors in the editor form and disable save when
+  invalid.
+- Add secure admin access to web config endpoints (password / token) to prevent
+  unauthorized changes.
+- Add optional zone and stop name autocomplete using TfNSW lookup endpoint.
+- Add a persistent JSON file fallback (LittleFS) in addition to NVS for config
+  portability and ease of manual editing.
+- Add a dedicated `/config` page in WebUI for full device settings (poll
+  interval, display brightness, timezone, etc.)
+
+---
+
 ## [0.2.3] 2026-04-02
 
 ### Added
@@ -22,22 +40,6 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
   - “Edit stops” toggle reveals editable stop ID/name fields.
   - Save and reset buttons with status messages.
   - Client JS syncs with API and updates the live stops display.
-
-## Things to do / Enhancements
-
-- Add client-side validation for stop ID (numeric only, max length) and stop
-  name length before submitting.
-- Support adding/removing stops dynamically (up to `STOP_COUNT`) in the UI and
-  potentially in runtime config.
-- Add UI feedback on validation errors in the editor form and disable save when
-  invalid.
-- Add secure admin access to web config endpoints (password / token) to prevent
-  unauthorized changes.
-- Add optional zone and stop name autocomplete using TfNSW lookup endpoint.
-- Add a persistent JSON file fallback (LittleFS) in addition to NVS for config
-  portability and ease of manual editing.
-- Add a dedicated `/config` page in WebUI for full device settings (poll
-  interval, display brightness, timezone, etc.)
 
 ## [0.2.2] 2026-04-02
 
