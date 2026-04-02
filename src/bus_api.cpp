@@ -304,7 +304,9 @@ void diagFetchStop(uint8_t idx) {
   }
 
   bool chunked = (http.getSize() < 0);
-  DynamicJsonDocument doc(4096);
+  // ArduinoJson filter[0] is a pattern for ALL array elements, not just [0].
+  // TfNSW returns ~30 events; 20 filtered fields × ~660 bytes each ≈ 20KB.
+  DynamicJsonDocument doc(24576);
   DeserializationError err;
 
   if (chunked) {
