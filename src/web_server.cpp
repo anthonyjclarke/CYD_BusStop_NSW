@@ -141,8 +141,83 @@ h1{font-size:1.2em;margin-bottom:.15em}
 <div class="hdr"><span class="ts" id="clock">--</span><span class="upd" id="upd">--</span></div>
 <div id="stops">Loading...</div>
 <div class="ft"><a href="/api/state">JSON</a></div>
+<div class="ft"><button id="btnToggleEdit" onclick="toggleEditPane()">Edit stops</button></div>
+<div id="stopConfig" style="display:none;margin-top:.8em;background:#222;border:1px solid #444;border-radius:6px;padding:.8em;">
+  <h2 style="font-size:1em;margin-bottom:.4em;">Edit stops</h2>
+  <div id="stopConfigRows"></div>
+  <div style="margin-top:.5em;display:flex;gap:.5em;align-items:center;">
+    <button onclick="saveStopConfig()">Save</button>
+    <button onclick="resetStopConfig()">Reset defaults</button>
+    <span id="configStatus" style="color:#8f8;font-size:.85em;"></span>
+  </div>
+</div>
 <script>
-var D=null,fetched=0;
+var D=null,fetched=0,stopsConfig=[];
+function toggleEditPane(){
+  var pane=document.getElementById('stopConfig');
+  pane.style.display = (pane.style.display==='none'?'block':'none');
+}
+function renderStopConfigRows(){
+  var rows=document.getElementById('stopConfigRows');
+  if (!Array.isArray(stopsConfig) || stopsConfig.length===0) {
+    rows.innerHTML='<div class="nd">No stop data</div>';
+    return;
+  }
+  var h='';
+  stopsConfig.forEach(function(s,i){
+    h += '<div style="margin-bottom:.4em;display:flex;gap:.4em;align-items:center;">';
+    h += '<input id="stopId'+i+'" style="flex:1;" value="'+(s.id||'')+'" placeholder="Stop ID">';
+    h += '<input id="stopName'+i+'" style="flex:2;" value="'+(s.name||'')+'" placeholder="Stop name">';
+    h += '</div>';
+  });
+  rows.innerHTML = h;
+}
+function loadStopConfig(){
+  fetch('/api/stops').then(function(r){return r.json();}).then(function(arr){
+    stopsConfig = arr;
+    renderStopConfigRows();
+  }).catch(function(err){
+    document.getElementById('configStatus').textContent='Load failed';
+    console.warn(err);
+  });
+}
+function saveStopConfig(){
+  var payload=[];
+  for(var i=0;i<stopsConfig.length;i++){
+    var idInput=document.getElementById('stopId'+i);
+    var nameInput=document.getElementById('stopName'+i);
+    if (!idInput || !nameInput) continue;
+    payload.push({id:idInput.value.trim(),name:nameInput.value.trim()});
+  }
+  fetch('/api/stops',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+  .then(function(){
+    document.getElementById('configStatus').textContent='Saved';
+    loadStopConfig();
+    fetchAndRender();
+  }).catch(function(e){
+    document.getElementById('configStatus').textContent='Save failed';
+    console.warn(e);
+  });
+}
+function resetStopConfig(){
+  fetch('/api/stops/reset',{method:'POST'})
+  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+  .then(function(){
+    document.getElementById('configStatus').textContent='Reset';
+    loadStopConfig();
+    fetchAndRender();
+  }).catch(function(e){
+    document.getElementById('configStatus').textContent='Reset failed';
+    console.warn(e);
+  });
+}
+function fetchAndRender(){
+  fetch('/api/state').then(function(r){return r.json();}).then(function(d){
+    D=d;fetched=Date.now();render();
+  }).catch(function(){
+  });
+}
 function render(){
   if(!D)return;
   document.getElementById('clock').textContent=D.time+'  '+D.date;
@@ -166,10 +241,10 @@ function render(){
   document.getElementById('stops').innerHTML=h;
 }
 function poll(){
-  fetch('/api/state').then(function(r){return r.json();}).then(function(d){
-    D=d;fetched=Date.now();render();
-  }).catch(function(){});
+  fetchAndRender();
 }
+
+loadStopConfig();
 poll();
 setInterval(poll,60000);
 setInterval(render,15000);
