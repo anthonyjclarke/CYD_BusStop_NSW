@@ -9,6 +9,32 @@ char stopNames[STOP_COUNT][STOP_NAME_MAX];
 
 static const char* PREF_NAMESPACE = "busstop";
 static const char* PREF_COUNT_KEY = "count";
+static const char* PREF_SIG_KEY   = "defsSig";
+
+static uint32_t hashBytes(uint32_t hash, const char* s) {
+  while (s && *s) {
+    hash ^= (uint8_t)*s++;
+    hash *= 16777619u;
+  }
+  return hash;
+}
+
+static uint32_t compiledDefaultsSignature() {
+  uint32_t hash = 2166136261u;  // FNV-1a
+  hash ^= STOP_COUNT;
+  hash *= 16777619u;
+
+  for (uint8_t i = 0; i < STOP_COUNT; i++) {
+    hash = hashBytes(hash, STOP_IDS_DEFAULT[i]);
+    hash ^= 0xffu;
+    hash *= 16777619u;
+    hash = hashBytes(hash, STOP_NAMES_DEFAULT[i]);
+    hash ^= 0x00u;
+    hash *= 16777619u;
+  }
+
+  return hash;
+}
 
 static String stopIdKey(uint8_t idx) {
   return String("id") + idx;
@@ -64,6 +90,7 @@ bool saveStopConfig() {
   }
 
   prefs.putUChar(PREF_COUNT_KEY, STOP_COUNT);
+  prefs.putUInt(PREF_SIG_KEY, compiledDefaultsSignature());
 
   for (uint8_t i = 0; i < STOP_COUNT; i++) {
     prefs.putString(stopIdKey(i).c_str(), stopIds[i]);
@@ -85,6 +112,14 @@ bool loadStopConfig() {
   uint8_t count = prefs.getUChar(PREF_COUNT_KEY, 0);
   if (count != STOP_COUNT) {
     prefs.end();
+    return false;
+  }
+
+  uint32_t savedSig = prefs.getUInt(PREF_SIG_KEY, 0);
+  uint32_t currentSig = compiledDefaultsSignature();
+  if (savedSig != currentSig) {
+    prefs.end();
+    DBG_INFO("Stop config: compiled defaults changed, reapplying defaults");
     return false;
   }
 

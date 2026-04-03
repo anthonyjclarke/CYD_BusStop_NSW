@@ -20,7 +20,7 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
   portability and ease of manual editing.
 - Add a dedicated `/config` page in WebUI for full device settings (poll
   interval, display brightness, timezone, etc.)
-- Add full config page in WebUI, including system diagnostics
+- Add full config page in WebUI, including system diagnostics.
 
 ### Code optimisations
 
@@ -28,25 +28,72 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
   the WiFi/lwIP stack alive during byte-by-byte stream reads; `delay(1)`
   blocks FreeRTOS for a full tick on every byte of a ~60KB response.
 - Replace `DynamicJsonDocument(8192)` in `fetchStop()` with
-  `StaticJsonDocument<4096>` — the ArduinoJson filter limits the parsed tree
-  to 3 fields × 3 departures; heap-allocating and freeing 8KB four times per
-  poll cycle causes fragmentation (history: stops 3–4 `IncompleteInput` bug).
+  `StaticJsonDocument<4096>` — the ArduinoJson filter limits the parsed tree;
+  heap-allocating and freeing 8KB four times per poll cycle causes fragmentation.
 - Fix vertical divider overdraw in `drawDividers()`: `drawFastVLine(PANEL_W,
   HEADER_H, 240, ...)` draws 28px past the bottom of the 240px screen —
-  length should be `240 - HEADER_H` (212). Silent clip from ILI9341, but
-  wastes SPI bandwidth on every `drawAllStops()` call.
-- Replace `DynamicJsonDocument` in `handleApiState()` (2048) and
-  `handleApiStops()` (1024) with `StaticJsonDocument` equivalents — both are
-  called on every browser poll; heap churn accumulates across multiple open tabs.
+  length should be `240 - HEADER_H` (212).
+- Replace `DynamicJsonDocument` in `handleApiState()` and `handleApiStops()`
+  with `StaticJsonDocument` equivalents — both are called on every browser poll.
 - Replace heap-allocated `String` returns from `stopIdKey()` / `stopNameKey()`
-  in `config.cpp` with stack `char` buffers via `snprintf` — called in a loop
-  on every NVS save/load, each allocates on the heap unnecessarily.
+  in `config.cpp` with stack `char` buffers via `snprintf`.
 - Fix double-`String` construction in `bus_api.cpp` fetch log line:
   `String(String(contentLen) + " bytes")` allocates two objects; use `%d`
-  format directly with `contentLen`.
+  format directly.
 - Move `fetchAllStops()` to a FreeRTOS task (Phase 3) — currently blocks the
-  main loop for ~2s (4 stops × 500ms `delay()` gap), leaving OTA and web
-  requests unresponsive during each 60s poll cycle.
+  main loop for ~10s, leaving OTA and web requests unresponsive.
+
+---
+
+## [0.2.4] 2026-04-03
+
+### Added
+- TfNSW departure parsing now captures:
+  - real-time control flag (`isRealtimeControlled`)
+  - planned vs estimated departure epochs and delay in seconds
+  - destination name (e.g. "Gladesville - Jordan St")
+  - first service alert subtitle per stop
+- TFT real-time indicators per departure row:
+  - green filled circle (`●`) for GPS-tracked live departures
+  - grey tilde (`~`) for scheduled-only departures
+- TFT and WebUI day abbreviation (Mon, Tue, etc.) for non-today departures
+  instead of showing large minute counts
+- WebUI per-departure `LIVE`/`SCHED` badge based on real-time status
+- WebUI delay pill: `+4m late` (orange) or `3m early` (green), suppressed
+  below ±2 min to filter GPS noise
+- WebUI destination column per departure row
+- WebUI amber alert banner when TfNSW returns service disruption info
+- `isLocalToday()`, `formatLocalDayAbbr()`, `getLocalTZOffset()`,
+  `getLogTimeStr()` helpers in `time_mgr`
+- `/api/state` now includes `tzOff` (TZ offset in seconds) for client-side
+  local-day calculation
+- Wall-clock timestamps in debug log output (local HH:MM:SS after NTP sync,
+  uptime fallback before sync)
+- `maxBlk` (largest contiguous free heap block) in fetch and init log lines
+- `performBusRefresh()` helper in `main.cpp` to deduplicate fetch+draw logic
+- `consumeStopRefreshRequest()` mechanism so WebUI stop edits queue a refresh
+  back to the main loop instead of fetching inside the async handler
+
+### Changed
+- "Now" departure colour changed from red to orange on both TFT and WebUI for
+  better visual distinction from "Gone" (red, WebUI only)
+- WebUI poll interval reduced from 60s to 15s; render interval from 15s to 5s
+  — WebUI now stays closer to TFT update cadence
+- `fetchStop()` now collects up to 8 departures, sorts by estimated epoch, and
+  keeps the 3 soonest — fixes out-of-order display when buses run early/late
+- `/api/state` response includes `rt`, `delay`, `dest` per departure and
+  `alert` per stop
+- WebUI layout: departure rows now have distinct columns for route, badge,
+  destination, delay pill, minutes/day label, and clock time
+- WebUI stop edit POST now queues a refresh instead of calling `fetchAllStops()`
+  directly in the async handler (non-blocking)
+- WebUI stop edit POST logs individual field changes and detects no-op saves
+- Delay logged in minutes (`delay:+4m`) instead of seconds
+- Default stop names updated: "To Meadowbank Stn", "To Macquarie Park"
+- Debug macros use `dbgTimestamp()` with wall-clock output via `getLogTimeStr()`
+
+### Removed
+- Temporary diagnostic fetch (`DIAG_FETCH`) code and build flag
 
 ---
 
@@ -64,7 +111,7 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
     `fetchAllStops()`.
   - `POST /api/stops/reset` restores defaults and refreshes data.
 - Minimal WebUI stop editor on `/`:
-  - “Edit stops” toggle reveals editable stop ID/name fields.
+  - "Edit stops" toggle reveals editable stop ID/name fields.
   - Save and reset buttons with status messages.
   - Client JS syncs with API and updates the live stops display.
 

@@ -19,3 +19,17 @@ time_t getUTCNow();
 // Format a UTC epoch as local HH:MM (Sydney TZ).
 // Writes into buf (must be >= 6 bytes). Returns buf.
 char* formatLocalHHMM(time_t epochUTC, char* buf, size_t bufLen);
+
+// Returns true if the given UTC epoch falls on today's date in local timezone.
+bool isLocalToday(time_t epochUTC);
+
+// Returns the current local timezone offset from UTC in seconds (e.g. +39600 for AEDT).
+int getLocalTZOffset();
+
+// Format a UTC epoch as a local 3-letter day abbreviation ("Mon", "Tue", etc.).
+// Writes into buf (must be >= 4 bytes). Returns buf.
+char* formatLocalDayAbbr(time_t epochUTC, char* buf, size_t bufLen);
+
+// Formatted local time string for logs, e.g. "14:37:05".
+// Pointer valid until next call.
+const char* getLogTimeStr();
