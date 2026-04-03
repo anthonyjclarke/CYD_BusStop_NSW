@@ -1,6 +1,6 @@
 # CYD_BusStop_NSW
 
-ESP32 bus stop notifier for the **ESP32-2432S028R (CYD 2.8")** displaying live NSW bus departures for four stops near Ryde/Putney (although these are easily changed). Built with PlatformIO and the Arduino framework.
+ESP32 bus stop notifier for the **ESP32-2432S028R (CYD 2.8")** displaying live NSW bus departures for four configurable stops near Ryde/Putney. Built with PlatformIO and the Arduino framework.
 
 ---
 
@@ -8,9 +8,14 @@ ESP32 bus stop notifier for the **ESP32-2432S028R (CYD 2.8")** displaying live N
 
 - Fetches the next 3 departures per stop from the TfNSW Trip Planner API
 - Displays all four stops simultaneously in a 2×2 grid (landscape 320×240)
-- Shows departure as route · minutes-until · clock time (e.g. `501  3m  10:48`)
+- TFT shows route · real-time indicator (`●`/`~`) · minutes/day label · clock time
+- WebUI shows route · `LIVE`/`SCHED` badge · destination · delay pill · minutes/day label · clock time
+- Departures sorted by estimated time — soonest first
+- Non-today departures show a day abbreviation (Mon, Tue, etc.) instead of minutes
+- Late/early bus indicators on WebUI (e.g. "+4m late", "3m early")
+- Service alert banner on WebUI when TfNSW returns disruption info
 - Live time and date header, updated every second via NTP
-- Web interface at the device IP: state JSON, OTA update, config (Phase 2)
+- Web interface at the device IP: live dashboard, JSON state API, stop editor
 
 ---
 
@@ -59,19 +64,20 @@ interval used here.
 ## Project Structure
 
 ```
-CYD_BusStop/
+CYD_BusStop_NSW/
 ├── platformio.ini             # Board, framework, libs, TFT build flags
 ├── partitions_custom.csv      # 4 MB flash layout with OTA slots
 ├── include/
 │   ├── config.h               # Stop IDs, API constants, display defaults
-│   ├── debug.h                # Leveled DBG_* macros (ERROR/WARN/INFO/VERBOSE)
+│   ├── debug.h                # Leveled DBG_* macros with wall-clock timestamps
 │   └── secrets.h              # Gitignored — WiFi + API credentials
 └── src/
     ├── main.cpp               # setup(), loop(), init orchestration
     ├── display.cpp/.h         # TFT drawing — header, panels, status bar
-    ├── bus_api.cpp/.h         # TfNSW API fetch + JSON parse
-    ├── time_mgr.cpp/.h        # ezTime NTP init + time/date strings
-    └── web_server.cpp/.h      # AsyncWebServer routes + ElegantOTA
+    ├── bus_api.cpp/.h         # TfNSW API fetch, parse, sort departures
+    ├── config.cpp             # Stop config NVS persistence
+    ├── time_mgr.cpp/.h        # ezTime NTP init, time/date/day helpers
+    └── web_server.cpp/.h      # AsyncWebServer routes, WebUI, JSON API
 ```
 
 ---
@@ -91,28 +97,30 @@ CYD_BusStop/
 
 Key tuneable constants:
 
-| Constant             | Default           | Purpose                      |
-|:---------------------|:------------------|:-----------------------------|
-| `POLL_INTERVAL_MS`   | `60000`           | Bus API refresh interval     |
-| `BRIGHTNESS_DEFAULT` | `200`             | Backlight (0–255)            |
-| `TIME_24HR_DEFAULT`  | `false`           | 12 hr display                |
-| `WIFI_AP_NAME`       | `"CYD-BusStop"`   | Captive portal AP name       |
-| `OTA_HOSTNAME`       | `"cyd-busstop"`   | mDNS + ArduinoOTA hostname   |
+| Constant             | Default              | Purpose                      |
+|:---------------------|:---------------------|:-----------------------------|
+| `POLL_INTERVAL_MS`   | `60000`              | Bus API refresh interval     |
+| `BRIGHTNESS_DEFAULT` | `200`                | Backlight (0–255)            |
+| `TIME_24HR_DEFAULT`  | `false`              | 12 hr display                |
+| `WIFI_AP_NAME`       | `"CYD-BusStop"`      | Captive portal AP name       |
+| `OTA_HOSTNAME`       | `"cyd-busstop"`      | mDNS + ArduinoOTA hostname   |
 
 ---
 
 ## Stop Configuration
 
-Stops are defined in `include/config.h`:
+Default stops are defined in `include/config.h`:
 
-| Stop ID | Display Name    |
-|:--------|:----------------|
-| 2112130 | To Gladesville  |
-| 2112131 | To Meadowbank   |
-| 211267  | End of Small St |
-| 211271  | To Macquarie    |
+| Stop ID | Display Name      |
+|:--------|:------------------|
+| 2112130 | To Gladesville    |
+| 2112131 | To Meadowbank Stn |
+| 211267  | End of Small St   |
+| 211271  | To Macquarie Park |
 
-To change stops, update `STOP_IDS[]` and `STOP_NAMES[]` in `config.h`.
+At runtime, the active stop list is stored in NVS and can be edited from the WebUI.
+Use the "Edit stops" pane on `/` to update stop IDs and display names, or reset back
+to the defaults above.
 
 ---
 
@@ -122,14 +130,17 @@ To change stops, update `STOP_IDS[]` and `STOP_NAMES[]` in `config.h`.
 # Build
 pio run
 
-# Flash
+# Flash via USB
 pio run --target upload
+
+# Flash via OTA
+pio run --target upload --upload-port cyd-busstop.local
 
 # Monitor serial output
 pio device monitor
 ```
 
-Upload speed is set to 921600 baud. Port is auto-detected by PlatformIO.
+Upload speed is set to 230400 baud. Port is auto-detected by PlatformIO.
 
 ---
 
@@ -147,51 +158,63 @@ is pre-filled and the device connects automatically if credentials are valid.
 
 ## Display Layout
 
-```
-┌──────────────────────────────────────┐
-│  10:45 AM              Tue, 1 Apr    │
-├───────────────────┬──────────────────┤
-│ To Gladesville    │ To Meadowbank    │
-│  501  3m  10:48   │  501  1m  10:46  │
-│  501  13m 10:58   │  501  11m 10:56  │
-│  501  23m 11:08   │  501  21m 11:06  │
-├───────────────────┼──────────────────┤
-│ End of Small St   │ To Macquarie     │
-│  500  5m  10:50   │  500  7m  10:52  │
-│  500  15m 11:00   │  500  17m 11:02  │
-│  500  25m 11:10   │  500  27m 11:12  │
-└───────────────────┴──────────────────┘
-```
+### TFT Dashboard
 
-Minutes-until are green (< 10 min) or yellow (≥ 10 min).
+![TFT dashboard](images/cyd-screenshot.png)
+
+The 2×2 grid shows four stops simultaneously. Each departure row displays:
+route number, real-time indicator (`●` green = GPS-tracked, `~` grey = scheduled),
+minutes until arrival (green <10 min, yellow >=10 min, orange = Now), and clock time.
+Non-today departures show a day abbreviation (Mon, Tue, etc.) in grey.
+The footer shows the last successful API fetch time.
+
+### WebUI Dashboard
+
+![WebUI dashboard](images/webui-dashboard-placeholder.png)
+
+The web interface adds destination names, `LIVE`/`SCHED` badges, delay pills
+(orange for late, green for early), and service alert banners.
+
+### WebUI Stop Editor
+
+![WebUI stop editor](images/webui-editor-placeholder.png)
+
+The "Edit stops" pane allows runtime changes to stop IDs and display names.
+Changes are persisted to NVS and trigger an immediate data refresh.
 
 ---
 
 ## Web Interface
 
-| Route        | Purpose                                      |
-|:-------------|:---------------------------------------------|
-| `/`          | Home — links to all routes                   |
-| `/api/state` | JSON — current time + all departure data     |
-| `/update`    | ElegantOTA firmware upload page              |
-| `/mirror`    | Canvas display mirror *(Phase 3)*            |
+| Route              | Purpose                                      |
+|:-------------------|:---------------------------------------------|
+| `/`                | Live dashboard + stop editor                 |
+| `/api/state`       | JSON — time, date, epoch, TZ offset, stops   |
+| `/api/stops`       | JSON — current runtime stop config           |
+| `/api/stops/reset` | POST — restore default stop configuration    |
+| `/mirror`          | Redirects to `/`                             |
 
 Access via the device IP shown in serial output, or `http://cyd-busstop.local/`
 if your network supports mDNS.
+
+### WebUI Features
+
+- Per-departure `LIVE` or `SCHED` badge based on real-time tracking status
+- Destination name for each departure (e.g. "Gladesville - Jordan St")
+- Delay pill: `+4m late` (orange) or `3m early` (green), suppressed below 2 min
+- Day abbreviation for non-today departures instead of minutes
+- Alert banner when TfNSW returns service disruption text
+- "Edit stops" pane to update persisted stop IDs and names
+- Auto-refresh: API poll every 15s, client-side recalc every 5s
 
 ---
 
 ## OTA Updates
 
-Two OTA methods are supported:
-
 **ArduinoOTA** — upload directly from PlatformIO during development:
 ```bash
 pio run --target upload --upload-port cyd-busstop.local
 ```
-
-**ElegantOTA** — browser-based upload via `/update`. Upload the `.pio/build/cyd/*.bin`
-firmware file.
 
 ---
 
@@ -206,12 +229,22 @@ Set `DEBUG_LEVEL` in `platformio.ini` build_flags:
 | 3     | `DBG_INFO`     | State changes, init (default)  |
 | 4     | `DBG_VERBOSE`  | Frequent events, values        |
 
+Debug lines include a wall-clock timestamp after NTP sync, or uptime before sync:
+
+```text
+[15:05:24] [INFO]  fetchStop[0] chunked, heap: 157152, maxBlk: 102388
+[15:05:25] [INFO]  Stop To Gladesville — 3 departure(s):
+[15:05:25] [INFO]    [1] Route 507     3m  15:09  RT  delay:+4m  Gladesville - Jordan St
+```
+
 ---
 
 ## Roadmap
 
-- **Phase 1** *(current)*: WiFi · NTP · TfNSW API · display layout
-- **Phase 2**: Web config page · NVS persistence · 12/24 hr toggle · brightness control
+- **Phase 1** ✓: WiFi · NTP · TfNSW API · TFT display layout · OTA
+- **Phase 2** ✓ (partial): Web dashboard · NVS stop persistence · live stop
+  editor · real-time indicators · delay/destination/alert display · day labels
+- **Phase 2** (remaining): 12/24 hr toggle · brightness control · full config page
 - **Phase 3**: Canvas display mirror at `/mirror` · font upgrade to VLW NotoSans
 
 ---

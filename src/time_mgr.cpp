@@ -5,6 +5,7 @@
 static Timezone myTZ;
 static char     s_timeBuffer[12];
 static char     s_dateBuffer[20];
+static char     s_logTimeBuffer[10];
 
 bool initTime() {
   DBG_INFO("Waiting for NTP sync (30s timeout)...");
@@ -47,4 +48,29 @@ char* formatLocalHHMM(time_t epochUTC, char* buf, size_t bufLen) {
   strncpy(buf, t.c_str(), bufLen - 1);
   buf[bufLen - 1] = '\0';
   return buf;
+}
+
+int getLocalTZOffset() {
+  return myTZ.getOffset() * 60;  // ezTime getOffset() returns minutes
+}
+
+bool isLocalToday(time_t epochUTC) {
+  // Compare local date of the given epoch with today's local date
+  String todayDate = myTZ.dateTime("Ymd");          // e.g. "20260402"
+  String depDate   = myTZ.dateTime(epochUTC, UTC_TIME, "Ymd");
+  return todayDate == depDate;
+}
+
+char* formatLocalDayAbbr(time_t epochUTC, char* buf, size_t bufLen) {
+  String d = myTZ.dateTime(epochUTC, UTC_TIME, "D");  // "Mon", "Tue", etc.
+  strncpy(buf, d.c_str(), bufLen - 1);
+  buf[bufLen - 1] = '\0';
+  return buf;
+}
+
+const char* getLogTimeStr() {
+  String t = myTZ.dateTime("H:i:s");
+  strncpy(s_logTimeBuffer, t.c_str(), sizeof(s_logTimeBuffer) - 1);
+  s_logTimeBuffer[sizeof(s_logTimeBuffer) - 1] = '\0';
+  return s_logTimeBuffer;
 }

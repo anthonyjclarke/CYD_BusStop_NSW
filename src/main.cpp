@@ -16,6 +16,13 @@ static uint32_t s_lastClockUpdate  = 0;
 static uint32_t s_lastPanelRefresh = 0;
 static char     s_lastFetchStr[6]  = "--:--";  // local HH:MM of last API fetch
 
+static void performBusRefresh() {
+  fetchAllStops();
+  formatLocalHHMM(getUTCNow(), s_lastFetchStr, sizeof(s_lastFetchStr));
+  drawAllStops();
+  drawLastUpdated(s_lastFetchStr);
+}
+
 // ---------------------------------------------------------------------------
 // Init helpers
 // ---------------------------------------------------------------------------
@@ -86,18 +93,16 @@ void setup() {
   initOTA();
 
   drawStatusBar("Fetching buses...", TFT_YELLOW);
-  fetchAllStops();
-  formatLocalHHMM(getUTCNow(), s_lastFetchStr, sizeof(s_lastFetchStr));
+  performBusRefresh();
 
   // Initial full draw
   drawHeader(getTimeStr(), getDateStr());
-  drawAllStops();
   drawLastUpdated(s_lastFetchStr);
 
   s_lastPoll        = millis();
   s_lastClockUpdate = millis();
 
-  DBG_INFO("Free heap: %u bytes", ESP.getFreeHeap());
+  DBG_INFO("Free heap: %u, maxBlk: %u", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
   DBG_INFO("=== Init complete ===");
 }
 
@@ -122,13 +127,17 @@ void loop() {
     drawLastUpdated(s_lastFetchStr);
   }
 
+  // WebUI stop edits queue a refresh so the async request task stays non-blocking.
+  if (consumeStopRefreshRequest()) {
+    s_lastPoll = now;
+    s_lastPanelRefresh = now;
+    performBusRefresh();
+  }
+
   // Full bus API refresh on poll interval
   if (now - s_lastPoll >= POLL_INTERVAL_MS) {
     s_lastPoll         = now;
     s_lastPanelRefresh = now;  // reset so we don't double-draw
-    fetchAllStops();
-    formatLocalHHMM(getUTCNow(), s_lastFetchStr, sizeof(s_lastFetchStr));
-    drawAllStops();
-    drawLastUpdated(s_lastFetchStr);
+    performBusRefresh();
   }
 }

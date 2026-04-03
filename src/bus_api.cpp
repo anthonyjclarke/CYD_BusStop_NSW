@@ -131,10 +131,13 @@ bool fetchStop(uint8_t idx) {
   url += stopIds[idx];
 
   // Filter — ArduinoJson reads the full stream but only stores these fields.
-  StaticJsonDocument<384> filter;
-  filter["stopEvents"][0]["departureTimePlanned"]   = true;
-  filter["stopEvents"][0]["departureTimeEstimated"] = true;
-  filter["stopEvents"][0]["transportation"]["number"] = true;
+  StaticJsonDocument<512> filter;
+  filter["stopEvents"][0]["departureTimePlanned"]              = true;
+  filter["stopEvents"][0]["departureTimeEstimated"]            = true;
+  filter["stopEvents"][0]["isRealtimeControlled"]              = true;
+  filter["stopEvents"][0]["transportation"]["number"]          = true;
+  filter["stopEvents"][0]["transportation"]["destination"]["name"] = true;
+  filter["stopEvents"][0]["infos"][0]["subtitle"]              = true;
 
   WiFiClientSecure client;
   client.setInsecure();
@@ -153,9 +156,9 @@ bool fetchStop(uint8_t idx) {
 
   int contentLen = http.getSize();
   bool chunked   = (contentLen < 0);
-  DBG_INFO("fetchStop[%d] %s, heap: %u",
+  DBG_INFO("fetchStop[%d] %s, heap: %u, maxBlk: %u",
            idx, chunked ? "chunked" : String(String(contentLen) + " bytes").c_str(),
-           ESP.getFreeHeap());
+           ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
   // Parse JSON directly from the network stream — only filter doc + TLS buffers
   // are in memory.  Increase buffer in case API is larger than expected.
@@ -185,14 +188,36 @@ bool fetchStop(uint8_t idx) {
   }
 
   time_t  nowUTC = getUTCNow();
-  uint8_t count  = 0;
 
   memset(&stopData[idx], 0, sizeof(StopData));
 
+  // Check for service alerts — capture first alert subtitle if present
   for (JsonObject ev : events) {
-    if (count >= DEPARTURES_PER_STOP) break;
+    JsonArray infos = ev["infos"].as<JsonArray>();
+    if (!infos.isNull() && infos.size() > 0) {
+      const char* subtitle = infos[0]["subtitle"];
+      if (subtitle && strlen(subtitle) > 0) {
+        stopData[idx].hasAlerts = true;
+        strncpy(stopData[idx].alertText, subtitle, sizeof(stopData[idx].alertText) - 1);
+        stopData[idx].alertText[sizeof(stopData[idx].alertText) - 1] = '\0';
+        break;  // one alert is enough
+      }
+    }
+  }
 
-    const char* dtStr = ev["departureTimeEstimated"] | ev["departureTimePlanned"];
+  // Collect up to MAX_COLLECT future departures, then sort and keep top 3.
+  // The API can return events out of estimated-time order when buses run
+  // early or late, so we need to sort by actual estimated epoch.
+  constexpr uint8_t MAX_COLLECT = 8;
+  Departure collected[MAX_COLLECT];
+  uint8_t numCollected = 0;
+
+  for (JsonObject ev : events) {
+    if (numCollected >= MAX_COLLECT) break;
+
+    const char* estStr     = ev["departureTimeEstimated"];
+    const char* plannedStr = ev["departureTimePlanned"];
+    const char* dtStr      = estStr ? estStr : plannedStr;
     if (!dtStr) continue;
 
     time_t depEpoch = parseISODatetime(dtStr);
@@ -201,9 +226,20 @@ bool fetchStop(uint8_t idx) {
     int mins = (int)((depEpoch - nowUTC) / 60);
     if (mins < 0) continue;
 
-    Departure& dep   = stopData[idx].departures[count];
+    Departure& dep   = collected[numCollected];
+    memset(&dep, 0, sizeof(Departure));
     dep.epochUTC     = depEpoch;
     dep.minutesUntil = mins;
+
+    // Planned time and delay calculation
+    if (plannedStr) {
+      dep.epochPlanned = parseISODatetime(plannedStr);
+      if (estStr && dep.epochPlanned > 0) {
+        dep.delaySecs = (int)(depEpoch - dep.epochPlanned);
+      }
+    }
+
+    dep.isRealtime = ev["isRealtimeControlled"] | false;
 
     formatLocalHHMM(depEpoch, dep.clockTime, sizeof(dep.clockTime));
 
@@ -212,8 +248,30 @@ bool fetchStop(uint8_t idx) {
       strncpy(dep.route, routeNum, sizeof(dep.route) - 1);
     }
 
+    const char* destName = ev["transportation"]["destination"]["name"];
+    if (destName) {
+      strncpy(dep.destination, destName, sizeof(dep.destination) - 1);
+    }
+
     dep.valid = true;
-    count++;
+    numCollected++;
+  }
+
+  // Sort collected departures by estimated epoch (soonest first)
+  for (uint8_t i = 0; i < numCollected; i++) {
+    for (uint8_t j = i + 1; j < numCollected; j++) {
+      if (collected[j].epochUTC < collected[i].epochUTC) {
+        Departure tmp = collected[i];
+        collected[i] = collected[j];
+        collected[j] = tmp;
+      }
+    }
+  }
+
+  // Copy the top DEPARTURES_PER_STOP into stopData
+  uint8_t count = (numCollected < DEPARTURES_PER_STOP) ? numCollected : DEPARTURES_PER_STOP;
+  for (uint8_t i = 0; i < count; i++) {
+    stopData[idx].departures[i] = collected[i];
   }
 
   stopData[idx].count       = count;
@@ -223,7 +281,11 @@ bool fetchStop(uint8_t idx) {
   DBG_INFO("Stop %s — %d departure(s):", stopNames[idx], count);
   for (uint8_t i = 0; i < count; i++) {
     const Departure& d = stopData[idx].departures[i];
-    DBG_INFO("  [%d] Route %-6s  %dm  %s", i + 1, d.route, d.minutesUntil, d.clockTime);
+    int delayMin = d.delaySecs / 60;
+    DBG_INFO("  [%d] Route %-6s  %dm  %s  %s  delay:%+dm  %s",
+             i + 1, d.route, d.minutesUntil, d.clockTime,
+             d.isRealtime ? "RT" : "sched",
+             delayMin, d.destination);
   }
   return stopData[idx].valid;
 }
@@ -249,3 +311,4 @@ void recalcMinutes() {
     }
   }
 }
+

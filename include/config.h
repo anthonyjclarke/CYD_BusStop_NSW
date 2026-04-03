@@ -13,16 +13,16 @@ constexpr uint8_t STOP_NAME_MAX = 24;
 
 constexpr const char* const STOP_IDS_DEFAULT[STOP_COUNT] = {
   "2112130",  // To Gladesville
-  "2112131",  // To Meadowbank
+  "2112131",  // To Meadowbank Stn
   "211267",   // End of Small St
-  "211271"    // To Macquarie
+  "211271"    // To Macquarie Park
 };
 
 constexpr const char* const STOP_NAMES_DEFAULT[STOP_COUNT] = {
   "To Gladesville",
-  "To Meadowbank",
+  "To Meadowbank Stn",
   "End of Small St",
-  "To Macquarie"
+  "To Macquarie Park"
 };
 
 extern char stopIds[STOP_COUNT][STOP_ID_MAX];

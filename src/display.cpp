@@ -1,5 +1,6 @@
 #include "display.h"
 #include "bus_api.h"
+#include "time_mgr.h"
 #include "../include/config.h"
 #include "../include/debug.h"
 
@@ -105,23 +106,35 @@ void drawStopPanel(uint8_t idx) {
     const Departure& dep = sd.departures[i];
     int rowY = py + ROW_NAME_H + (i * ROW_DEP_H) + 4;
 
-    // Route
+    // Route number
     tft.setTextColor(COL_ROUTE, COL_BG);
     tft.drawString(dep.route, px + PAD_X, rowY, 2);
 
-    // Minutes until — colour-coded, "Now" for 0
+    // Real-time indicator: filled circle (green) = live, tilde (grey) = scheduled
+    if (dep.isRealtime) {
+      tft.fillCircle(px + PAD_X + 36, rowY + 7, 3, COL_MINS_NEAR);
+    } else {
+      tft.setTextColor(TFT_DARKGREY, COL_BG);
+      tft.drawString("~", px + PAD_X + 33, rowY, 2);
+    }
+
+    // Minutes until — colour-coded; day abbreviation for non-today departures
     char minsStr[8];
-    if (dep.minutesUntil <= 0)
+    if (!isLocalToday(dep.epochUTC)) {
+      formatLocalDayAbbr(dep.epochUTC, minsStr, sizeof(minsStr));
+      tft.setTextColor(TFT_DARKGREY, COL_BG);
+    } else if (dep.minutesUntil <= 0) {
       strncpy(minsStr, "Now", sizeof(minsStr));
-    else
+      tft.setTextColor(TFT_ORANGE, COL_BG);
+    } else {
       snprintf(minsStr, sizeof(minsStr), "%dm", dep.minutesUntil);
-    tft.setTextColor((dep.minutesUntil <= 0) ? TFT_RED
-                     : (dep.minutesUntil < 10) ? COL_MINS_NEAR : COL_MINS_FAR, COL_BG);
-    tft.drawString(minsStr, px + PAD_X + 36, rowY, 2);
+      tft.setTextColor((dep.minutesUntil < 10) ? COL_MINS_NEAR : COL_MINS_FAR, COL_BG);
+    }
+    tft.drawString(minsStr, px + PAD_X + 46, rowY, 2);
 
     // Clock time
     tft.setTextColor(COL_TIME_FG, COL_BG);
-    tft.drawString(dep.clockTime, px + PAD_X + 80, rowY, 2);
+    tft.drawString(dep.clockTime, px + PAD_X + 92, rowY, 2);
   }
 }
 
