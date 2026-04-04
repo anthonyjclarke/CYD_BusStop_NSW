@@ -6,10 +6,14 @@
 
 char stopIds[STOP_COUNT][STOP_ID_MAX];
 char stopNames[STOP_COUNT][STOP_NAME_MAX];
+uint8_t displayBrightness = BRIGHTNESS_DEFAULT;
+bool    time24Hour       = TIME_24HR_DEFAULT;
 
 static const char* PREF_NAMESPACE = "busstop";
 static const char* PREF_COUNT_KEY = "count";
 static const char* PREF_SIG_KEY   = "defsSig";
+static const char* PREF_BRIGHTNESS_KEY = "bright";
+static const char* PREF_TIME24_KEY     = "time24";
 
 static uint32_t hashBytes(uint32_t hash, const char* s) {
   while (s && *s) {
@@ -56,6 +60,18 @@ void initStopConfig() {
   }
 }
 
+void initUserSettings() {
+  if (!loadUserSettings()) {
+    DBG_INFO("User settings: no saved settings, using defaults");
+    resetUserSettings();
+    if (!saveUserSettings()) {
+      DBG_WARN("User settings: save failed after reset");
+    }
+  } else {
+    DBG_INFO("User settings: loaded from NVS");
+  }
+}
+
 bool setStopConfig(uint8_t idx, const char* stopId, const char* stopName) {
   if (idx >= STOP_COUNT || stopId == nullptr || stopName == nullptr) {
     return false;
@@ -82,6 +98,16 @@ bool resetStopConfig() {
   return true;
 }
 
+bool setDisplayBrightnessSetting(uint8_t brightness) {
+  displayBrightness = brightness;
+  return true;
+}
+
+bool setTime24HourSetting(bool enabled) {
+  time24Hour = enabled;
+  return true;
+}
+
 bool saveStopConfig() {
   Preferences prefs;
   if (!prefs.begin(PREF_NAMESPACE, false)) {
@@ -99,6 +125,22 @@ bool saveStopConfig() {
 
   prefs.end();
   DBG_INFO("Stop config: saved %d entries", STOP_COUNT);
+  return true;
+}
+
+bool saveUserSettings() {
+  Preferences prefs;
+  if (!prefs.begin(PREF_NAMESPACE, false)) {
+    DBG_ERROR("User settings: prefs.begin failed");
+    return false;
+  }
+
+  prefs.putUChar(PREF_BRIGHTNESS_KEY, displayBrightness);
+  prefs.putBool(PREF_TIME24_KEY, time24Hour);
+
+  prefs.end();
+  DBG_INFO("User settings: saved brightness=%u, time24=%s",
+           displayBrightness, time24Hour ? "true" : "false");
   return true;
 }
 
@@ -138,5 +180,30 @@ bool loadStopConfig() {
   }
 
   prefs.end();
+  return true;
+}
+
+bool loadUserSettings() {
+  Preferences prefs;
+  if (!prefs.begin(PREF_NAMESPACE, true)) {
+    DBG_ERROR("User settings: prefs.begin(readonly) failed");
+    return false;
+  }
+
+  if (!prefs.isKey(PREF_BRIGHTNESS_KEY) || !prefs.isKey(PREF_TIME24_KEY)) {
+    prefs.end();
+    return false;
+  }
+
+  displayBrightness = prefs.getUChar(PREF_BRIGHTNESS_KEY, BRIGHTNESS_DEFAULT);
+  time24Hour = prefs.getBool(PREF_TIME24_KEY, TIME_24HR_DEFAULT);
+
+  prefs.end();
+  return true;
+}
+
+bool resetUserSettings() {
+  displayBrightness = BRIGHTNESS_DEFAULT;
+  time24Hour = TIME_24HR_DEFAULT;
   return true;
 }

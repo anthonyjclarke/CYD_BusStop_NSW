@@ -127,7 +127,13 @@ void drawStopPanel(uint8_t idx) {
       strncpy(minsStr, "Now", sizeof(minsStr));
       tft.setTextColor(TFT_ORANGE, COL_BG);
     } else {
-      snprintf(minsStr, sizeof(minsStr), "%dm", dep.minutesUntil);
+      if (dep.minutesUntil > 60) {
+        int hours = dep.minutesUntil / 60;
+        int mins = dep.minutesUntil % 60;
+        snprintf(minsStr, sizeof(minsStr), "%dh%02dm", hours, mins);
+      } else {
+        snprintf(minsStr, sizeof(minsStr), "%dm", dep.minutesUntil);
+      }
       tft.setTextColor((dep.minutesUntil < 10) ? COL_MINS_NEAR : COL_MINS_FAR, COL_BG);
     }
     tft.drawString(minsStr, px + PAD_X + 46, rowY, 2);

@@ -27,16 +27,24 @@ constexpr const char* const STOP_NAMES_DEFAULT[STOP_COUNT] = {
 
 extern char stopIds[STOP_COUNT][STOP_ID_MAX];
 extern char stopNames[STOP_COUNT][STOP_NAME_MAX];
+extern uint8_t displayBrightness;
+extern bool    time24Hour;
 
 void initStopConfig();
+void initUserSettings();
 
 bool setStopConfig(uint8_t idx, const char* stopId, const char* stopName);
+bool setDisplayBrightnessSetting(uint8_t brightness);
+bool setTime24HourSetting(bool enabled);
 
 bool saveStopConfig();
+bool saveUserSettings();
 
 bool loadStopConfig();
+bool loadUserSettings();
 
 bool resetStopConfig();
+bool resetUserSettings();
 
 // ---------------------------------------------------------------------------
 // TfNSW API

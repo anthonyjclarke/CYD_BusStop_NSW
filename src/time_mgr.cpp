@@ -22,8 +22,7 @@ bool initTime() {
 }
 
 const char* getTimeStr() {
-  // Phase 2: read 12/24hr preference from NVS; hardcoded default for now
-  String t = TIME_24HR_DEFAULT
+  String t = time24Hour
     ? myTZ.dateTime("H:i")      // 14:35
     : myTZ.dateTime("g:i A");   // 2:35 PM
 

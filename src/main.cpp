@@ -88,6 +88,8 @@ void setup() {
   initTime();
 
   initStopConfig();
+  initUserSettings();
+  setBrightness(displayBrightness);
   initBusApi();
   initWebServer();
   initOTA();
@@ -132,6 +134,12 @@ void loop() {
     s_lastPoll = now;
     s_lastPanelRefresh = now;
     performBusRefresh();
+  }
+
+  if (consumeDisplayRefreshRequest()) {
+    drawHeader(getTimeStr(), getDateStr());
+    drawAllStops();
+    drawLastUpdated(s_lastFetchStr);
   }
 
   // Full bus API refresh on poll interval
