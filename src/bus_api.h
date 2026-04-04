@@ -15,7 +15,7 @@ struct Departure {
 };
 
 struct StopData {
-  Departure departures[DEPARTURES_PER_STOP];
+  Departure departures[MAX_STORED_DEPARTURES];
   uint8_t   count;
   bool      valid;          // at least one departure returned
   bool      hasAlerts;      // true if infos[] was non-empty

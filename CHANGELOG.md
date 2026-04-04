@@ -18,23 +18,24 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
 - Add optional zone and stop name autocomplete using TfNSW lookup endpoint.
 - Add a persistent JSON file fallback (LittleFS) in addition to NVS for config
   portability and ease of manual editing.
-- Add a dedicated `/config` page in WebUI for full device settings (poll
-  interval, display brightness, timezone, etc.)
-- Add full config page in WebUI, including system diagnostics.
 
 ### Code optimisations
 
 - Replace `delay(1)` with `yield()` in `DeChunkStream::_timedRead()` — keeps
   the WiFi/lwIP stack alive during byte-by-byte stream reads; `delay(1)`
   blocks FreeRTOS for a full tick on every byte of a ~60KB response.
-- Replace `DynamicJsonDocument(8192)` in `fetchStop()` with
-  `StaticJsonDocument<4096>` — the ArduinoJson filter limits the parsed tree;
-  heap-allocating and freeing 8KB four times per poll cycle causes fragmentation.
+- Revisit `DynamicJsonDocument(8192)` in `fetchStop()` — the ArduinoJson filter
+  limits the parsed tree, so the buffer may be oversized; confirm the minimum
+  safe capacity with measurement, then consider reducing it or switching to a
+  fixed-capacity document only if stack impact is acceptable.
 - Fix vertical divider overdraw in `drawDividers()`: `drawFastVLine(PANEL_W,
   HEADER_H, 240, ...)` draws 28px past the bottom of the 240px screen —
   length should be `240 - HEADER_H` (212).
-- Replace `DynamicJsonDocument` in `handleApiState()` and `handleApiStops()`
-  with `StaticJsonDocument` equivalents — both are called on every browser poll.
+- Review JSON document allocation in `handleApiState()` and `handleApiStops()`
+  — `handleApiStops()` is still a good candidate for a fixed-capacity document,
+  but `handleApiState()` now builds a larger configurable payload and should be
+  resized or refactored based on measured worst-case output rather than blindly
+  moved from heap to stack.
 - Replace heap-allocated `String` returns from `stopIdKey()` / `stopNameKey()`
   in `config.cpp` with stack `char` buffers via `snprintf`.
 - Fix double-`String` construction in `bus_api.cpp` fetch log line:
@@ -42,6 +43,47 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
   format directly.
 - Move `fetchAllStops()` to a FreeRTOS task (Phase 3) — currently blocks the
   main loop for ~10s, leaving OTA and web requests unresponsive.
+
+---
+
+## [0.3.0] 2026-04-05
+
+### Added
+- Dedicated `/config` WebUI page for:
+  - display brightness control
+  - 12/24-hour clock toggle
+  - configurable WebUI departures-per-stop count
+  - runtime stop editor
+  - device/system stats
+  - raw `/api/state` JSON viewer
+- Persisted user settings in NVS for:
+  - display brightness
+  - 12/24-hour clock mode
+  - WebUI departure count
+- New WebUI/API endpoints:
+  - `GET /config`
+  - `GET /api/settings`
+  - `POST /api/settings`
+  - `POST /api/settings/reset`
+  - `GET /api/stats`
+- Separate TFT/WebUI departure limits:
+  - TFT remains fixed at 3 rows
+  - backend stores up to 8 departures per stop
+  - WebUI can display 1 to 8 departures per stop
+
+### Changed
+- Main WebUI dashboard at `/` is now departures-only; stop editing and raw JSON
+  moved to `/config`
+- `/api/state` now serializes departures up to the configured WebUI limit
+- `StopData` storage expanded so the WebUI can show more than the TFT
+- Config page stats now show WebUI row count, TFT row count, and device info
+- Project docs updated to reflect the new `/config` workflow and settings model
+
+### Fixed
+- TFT time-to-go formatter now shows `60m` instead of `1h00m`
+- WebUI departure rows now fit on a single line again after the config-page
+  layout changes
+- WebUI hour-formatting boundary now matches the TFT so `60m` stays `60m`
 
 ---
 

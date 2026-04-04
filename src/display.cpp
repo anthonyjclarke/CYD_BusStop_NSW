@@ -102,7 +102,7 @@ void drawStopPanel(uint8_t idx) {
     return;
   }
 
-  for (uint8_t i = 0; i < sd.count && i < DEPARTURES_PER_STOP; i++) {
+  for (uint8_t i = 0; i < sd.count && i < TFT_DEPARTURES_PER_STOP; i++) {
     const Departure& dep = sd.departures[i];
     int rowY = py + ROW_NAME_H + (i * ROW_DEP_H) + 4;
 
@@ -127,7 +127,13 @@ void drawStopPanel(uint8_t idx) {
       strncpy(minsStr, "Now", sizeof(minsStr));
       tft.setTextColor(TFT_ORANGE, COL_BG);
     } else {
-      snprintf(minsStr, sizeof(minsStr), "%dm", dep.minutesUntil);
+      if (dep.minutesUntil > 60) {
+        int hours = dep.minutesUntil / 60;
+        int mins = dep.minutesUntil % 60;
+        snprintf(minsStr, sizeof(minsStr), "%dh%02dm", hours, mins);
+      } else {
+        snprintf(minsStr, sizeof(minsStr), "%dm", dep.minutesUntil);
+      }
       tft.setTextColor((dep.minutesUntil < 10) ? COL_MINS_NEAR : COL_MINS_FAR, COL_BG);
     }
     tft.drawString(minsStr, px + PAD_X + 46, rowY, 2);
