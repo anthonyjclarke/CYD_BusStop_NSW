@@ -4,7 +4,8 @@
 
 Displays the next 3 bus departures for 4 NSW stops near Ryde/Putney, fetched from the
 TfNSW Trip Planner API. Shows a live time/date header on the TFT and a live web
-dashboard at `/` with editable stops, delay indicators, real-time badges, and alerts.
+dashboard at `/` with delay indicators, real-time badges, and alerts, plus a
+`/config` page for settings, stats, JSON, and stop editing.
 
 ## Target Hardware
 
@@ -21,7 +22,7 @@ Standard CYD pin assignments apply — see global CLAUDE.md.
 | 211271  | To Macquarie Park |
 
 Defaults defined in `config.h`. At runtime, the active stop list is stored in NVS
-and can be edited from the WebUI "Edit stops" pane.
+and can be edited from `/config`.
 
 ## API
 
@@ -42,7 +43,8 @@ Key available on the application detail page once approved.
 
 Parsed departure fields: route, destination, estimated epoch, planned epoch,
 delay (seconds), real-time flag, and optional alert subtitle. Departures are
-collected (up to 8), sorted by estimated epoch, and the 3 soonest are kept.
+collected and stored (up to 8), sorted by estimated epoch. The TFT renders the
+first 3; the WebUI can be configured to show 1 to 8.
 
 ## Module Structure
 
@@ -53,7 +55,7 @@ collected (up to 8), sorted by estimated epoch, and the 3 soonest are kept.
 | `src/bus_api.cpp/.h`    | TfNSW API fetch, JSON parse, sort, StopData structs  |
 | `src/time_mgr.cpp/.h`   | ezTime NTP init, time/date/day helpers, TZ offset    |
 | `src/web_server.cpp/.h` | AsyncWebServer routes, WebUI, `/api/state`, refresh Q |
-| `src/config.cpp`        | Stop config: NVS load/save/reset, runtime arrays     |
+| `src/config.cpp`        | NVS load/save/reset for stops and user settings      |
 | `include/config.h`      | All tuneable constants + stop config declarations    |
 | `include/debug.h`       | Levelled debug macros with wall-clock timestamps     |
 
@@ -85,28 +87,35 @@ Footer area shows `upd HH:MM` after successful fetch.
 | WebUI render     | 5s       | Client-side JS recalc from epoch           |
 | WebUI API poll   | 15s      | `fetch('/api/state')` from browser         |
 | WebUI stop edit  | on-demand| `consumeStopRefreshRequest()` in loop()    |
+| WebUI display cfg| on-demand| `consumeDisplayRefreshRequest()` in loop() |
 
 ## Web API Endpoints
 
 | Method | Path               | Description                                          |
 |:-------|:-------------------|:-----------------------------------------------------|
-| GET    | `/`                | Live web dashboard + stop editor                     |
+| GET    | `/`                | Live web departures dashboard                        |
+| GET    | `/config`          | Settings, stop editor, stats, raw JSON               |
 | GET    | `/api/state`       | JSON: time, date, UTC epoch, TZ offset, stop data    |
+| GET    | `/api/settings`    | JSON: persisted user settings                        |
+| GET    | `/api/stats`       | JSON: device stats, row limits, fetch ages           |
 | GET    | `/api/stops`       | JSON array of current stop id/name pairs             |
+| POST   | `/api/settings`    | Update settings; persists and redraws display        |
+| POST   | `/api/settings/reset` | Restore default user settings                    |
 | POST   | `/api/stops`       | Update stop list (JSON array); persists + queues refresh |
 | POST   | `/api/stops/reset` | Restore default stops; persists + queues refresh     |
 | GET    | `/mirror`          | Redirects to `/`                                     |
 
 `/api/state` fields: `time`, `date`, `now` (UTC epoch), `tzOff` (seconds),
 `stops[]` with optional `alert`, and per-departure `route`, `clock`, `minutes`,
-`epoch`, `rt` (bool), `delay` (seconds), and optional `dest`.
+`epoch`, `rt` (bool), `delay` (seconds), and optional `dest`. The response also
+includes `webuiDepartureCount`.
 
 ## Build Phases
 
 - **Phase 1** ✓: WiFi + NTP + API fetch + display + web dashboard + OTA
-- **Phase 2** ✓ (partial): NVS stop config persistence + web stop editor UI +
-  richer departure metadata (RT, delay, destination, alerts, day labels)
-- **Phase 2** (remaining): Full `/config` page (poll interval, brightness, timezone)
+- **Phase 2** ✓: NVS stop config persistence + full `/config` page + persisted
+  display settings + configurable WebUI rows + richer departure metadata
+  (RT, delay, destination, alerts, day labels)
 - **Phase 3**: Canvas display mirror at `/mirror` using `/api/state` JSON
 
 ## Known Issues / Notes
@@ -122,10 +131,12 @@ Footer area shows `upd HH:MM` after successful fetch.
   and web requests are unresponsive during this window; FreeRTOS task planned
 - Stop config web editor has no client-side validation — server rejects invalid
   input (length checks) but no UI feedback yet; tracked in CHANGELOG enhancements
-- `TIME_24HR_DEFAULT = false` → header displays 12hr format (e.g. "2:35 PM");
-  set to `true` in `config.h` for 24hr ("14:35")
+- `TIME_24HR_DEFAULT = false` → default header displays 12hr format
+  (e.g. "2:35 PM"), but this can now be overridden from `/config`
 - WebUI stop edit uses `consumeStopRefreshRequest()` to defer fetch to the main
   loop — keeps the async web handler non-blocking
+- Display-setting changes use `consumeDisplayRefreshRequest()` so redraw-only
+  updates do not force a new bus fetch
 - TfNSW `occupancy` field is not populated on Ryde/Putney routes — confirmed absent
   via diagnostic fetch; not worth implementing
 

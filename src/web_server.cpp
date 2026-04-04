@@ -16,12 +16,13 @@ static volatile bool s_displayRefreshRequested = false;
 static void handleApiState(AsyncWebServerRequest* req) {
   recalcMinutes();
 
-  DynamicJsonDocument doc(3072);
+  DynamicJsonDocument doc(8192);
 
   doc["time"]  = getTimeStr();
   doc["date"]  = getDateStr();
   doc["now"]   = (long)getUTCNow();
   doc["tzOff"] = getLocalTZOffset();
+  doc["webuiDepartureCount"] = webuiDepartureCount;
 
   JsonArray stops = doc.createNestedArray("stops");
   for (uint8_t i = 0; i < STOP_COUNT; i++) {
@@ -36,7 +37,8 @@ static void handleApiState(AsyncWebServerRequest* req) {
     }
 
     JsonArray deps = stop.createNestedArray("departures");
-    for (uint8_t j = 0; j < stopData[i].count; j++) {
+    uint8_t webCount = (stopData[i].count < webuiDepartureCount) ? stopData[i].count : webuiDepartureCount;
+    for (uint8_t j = 0; j < webCount; j++) {
       const Departure& d = stopData[i].departures[j];
       JsonObject dep = deps.createNestedObject();
       dep["route"]   = d.route;
@@ -77,6 +79,9 @@ static void handleApiSettings(AsyncWebServerRequest* req) {
   doc["brightnessDefault"]  = BRIGHTNESS_DEFAULT;
   doc["time24Hour"]         = time24Hour;
   doc["time24HourDefault"]  = TIME_24HR_DEFAULT;
+  doc["webuiDepartureCount"]        = webuiDepartureCount;
+  doc["webuiDepartureCountDefault"] = WEBUI_DEPARTURES_DEFAULT;
+  doc["webuiDepartureCountMax"]     = MAX_STORED_DEPARTURES;
 
   String body;
   serializeJson(doc, body);
@@ -105,6 +110,9 @@ static void handleApiStats(AsyncWebServerRequest* req) {
   doc["pollIntervalSec"] = POLL_INTERVAL_MS / 1000;
   doc["stopCount"]       = STOP_COUNT;
   doc["lastFetchAgeSec"] = newestFetchAge;
+  doc["webuiDepartureCount"] = webuiDepartureCount;
+  doc["maxStoredDepartures"] = MAX_STORED_DEPARTURES;
+  doc["tftDepartures"]       = TFT_DEPARTURES_PER_STOP;
   doc["time"]            = getTimeStr();
   doc["date"]            = getDateStr();
 
@@ -200,7 +208,7 @@ static void handleApiSettingsUpdate(AsyncWebServerRequest* req, uint8_t* data, s
   }
 
   JsonObject obj = doc.as<JsonObject>();
-  if (!obj.containsKey("brightness") || !obj.containsKey("time24Hour")) {
+  if (!obj.containsKey("brightness") || !obj.containsKey("time24Hour") || !obj.containsKey("webuiDepartureCount")) {
     req->send(400, "application/json", "{\"error\":\"Missing settings fields\"}");
     return;
   }
@@ -211,12 +219,20 @@ static void handleApiSettingsUpdate(AsyncWebServerRequest* req, uint8_t* data, s
     return;
   }
 
+  int webuiCount = obj["webuiDepartureCount"];
+  if (webuiCount < 1 || webuiCount > MAX_STORED_DEPARTURES) {
+    req->send(400, "application/json", "{\"error\":\"WebUI departures out of range\"}");
+    return;
+  }
+
   bool newTime24Hour = obj["time24Hour"];
+  bool webuiCountChanged = (webuiDepartureCount != (uint8_t)webuiCount);
   bool brightnessChanged = (displayBrightness != (uint8_t)brightness);
   bool timeFormatChanged = (time24Hour != newTime24Hour);
 
   setDisplayBrightnessSetting((uint8_t)brightness);
   setTime24HourSetting(newTime24Hour);
+  setWebuiDepartureCountSetting((uint8_t)webuiCount);
 
   if (!saveUserSettings()) {
     DBG_WARN("/api/settings POST: saveUserSettings failed");
@@ -226,7 +242,7 @@ static void handleApiSettingsUpdate(AsyncWebServerRequest* req, uint8_t* data, s
     setBrightness(displayBrightness);
   }
 
-  if (brightnessChanged || timeFormatChanged) {
+  if (brightnessChanged || timeFormatChanged || webuiCountChanged) {
     s_displayRefreshRequested = true;
   }
 
@@ -253,19 +269,19 @@ a{color:var(--accent);text-decoration:none}
 .stop{background:rgba(24,32,40,.92);border:1px solid var(--line);border-radius:14px;padding:.8rem .9rem;margin-bottom:.65rem;box-shadow:0 12px 28px rgba(0,0,0,.18)}
 .sh{display:flex;justify-content:space-between;align-items:center;margin-bottom:.45rem}
 .sn{color:var(--accent);font-weight:700}
-.dep{display:grid;grid-template-columns:38px 50px minmax(0,1fr) auto auto;column-gap:.4rem;padding:.22rem 0;font-size:.88rem;align-items:center}
+.dep{display:grid;grid-template-columns:34px 46px minmax(0,1fr) max-content 42px 42px;column-gap:.28rem;padding:.2rem 0;font-size:.82rem;align-items:center}
 .dr{font-weight:700}
-.ds{min-width:50px}
+.ds{min-width:46px}
 .dd{min-width:0;color:var(--muted);font-size:.76rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dy{min-width:52px;text-align:right}
-.mn{min-width:42px;text-align:right}
-.badge{font-size:.68rem;padding:.12rem .38rem;border-radius:999px;display:inline-block}
+.dy{min-width:0;text-align:right;white-space:nowrap}
+.mn{min-width:42px;text-align:right;white-space:nowrap}
+.badge{font-size:.62rem;padding:.1rem .3rem;border-radius:999px;display:inline-block;white-space:nowrap}
 .badge-rt{background:#0f3218;color:#71f58c;border:1px solid #245c31}
 .badge-sched{background:#212a34;color:#93a2b1;border:1px solid #394553}
-.delay{display:inline-block;font-size:.72rem;padding:.1rem .45rem;border-radius:999px;border:1px solid #6b4a00;background:#342708;color:#ffbe56}
-.delay-early{display:inline-block;font-size:.72rem;padding:.1rem .45rem;border-radius:999px;border:1px solid #23572c;background:#122617;color:#7dff8a}
+.delay{display:inline-block;font-size:.66rem;padding:.08rem .34rem;border-radius:999px;border:1px solid #6b4a00;background:#342708;color:#ffbe56;white-space:nowrap}
+.delay-early{display:inline-block;font-size:.66rem;padding:.08rem .34rem;border-radius:999px;border:1px solid #23572c;background:#122617;color:#7dff8a;white-space:nowrap}
 .near{color:var(--good)}.far{color:var(--warn)}.now{color:var(--now)}.gone{color:var(--gone)}
-.ck{color:#b7c3ce}
+.ck{color:#b7c3ce;white-space:nowrap;text-align:right}
 .nd{color:#61717f;font-style:italic;font-size:.85rem}
 </style></head><body>
 <div class="topnav"><a href="/config">Config</a></div>
@@ -419,6 +435,8 @@ pre{white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto;ba
       <div class="stat"><span class="label">Uptime</span><span class="value" id="statUptime">--</span></div>
       <div class="stat"><span class="label">Free Heap</span><span class="value" id="statHeap">--</span></div>
       <div class="stat"><span class="label">Last Fetch</span><span class="value" id="statFetch">--</span></div>
+      <div class="stat"><span class="label">WebUI Rows</span><span class="value" id="statRows">--</span></div>
+      <div class="stat"><span class="label">TFT Rows</span><span class="value" id="statTftRows">--</span></div>
     </div>
     <div id="stopStats" style="margin-top:12px"></div>
   </section>
@@ -435,6 +453,13 @@ pre{white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto;ba
     <div class="field toggle">
       <input id="time24Hour" type="checkbox">
       <label for="time24Hour" style="margin:0">Use 24-hour clock on TFT and WebUI</label>
+    </div>
+    <div class="field">
+      <label for="webuiDepartureCount">Departures shown on WebUI</label>
+      <div class="rangeWrap">
+        <input id="webuiDepartureCount" type="range" min="1" max="8" step="1" oninput="document.getElementById('webuiDepartureCountValue').textContent=this.value">
+        <span class="pill" id="webuiDepartureCountValue">--</span>
+      </div>
     </div>
     <div class="actions">
       <button class="btn primary" onclick="saveSettings()">Save settings</button>
@@ -486,6 +511,9 @@ function loadSettings(){
     document.getElementById('brightness').value=d.brightness;
     document.getElementById('brightnessValue').textContent=d.brightness;
     document.getElementById('time24Hour').checked=!!d.time24Hour;
+    document.getElementById('webuiDepartureCount').max=d.webuiDepartureCountMax;
+    document.getElementById('webuiDepartureCount').value=d.webuiDepartureCount;
+    document.getElementById('webuiDepartureCountValue').textContent=d.webuiDepartureCount;
   }).catch(function(){
     document.getElementById('settingsStatus').textContent='Failed to load settings';
   });
@@ -493,7 +521,8 @@ function loadSettings(){
 function saveSettings(){
   var payload={
     brightness:parseInt(document.getElementById('brightness').value,10),
-    time24Hour:document.getElementById('time24Hour').checked
+    time24Hour:document.getElementById('time24Hour').checked,
+    webuiDepartureCount:parseInt(document.getElementById('webuiDepartureCount').value,10)
   };
   fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
   .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
@@ -585,6 +614,8 @@ function loadStats(){
     document.getElementById('statUptime').textContent=fmtDuration(d.uptimeSec);
     document.getElementById('statHeap').textContent=d.freeHeap+' free / '+d.maxAllocHeap+' max';
     document.getElementById('statFetch').textContent=fmtFetchAge(d.lastFetchAgeSec)+' / poll '+d.pollIntervalSec+'s';
+    document.getElementById('statRows').textContent=d.webuiDepartureCount+' of '+d.maxStoredDepartures+' stored';
+    document.getElementById('statTftRows').textContent=d.tftDepartures;
     var h='';
     (d.stops||[]).forEach(function(s){
       h+='<div class="stopstat">'

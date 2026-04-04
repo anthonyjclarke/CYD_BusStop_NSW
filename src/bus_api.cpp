@@ -205,15 +205,15 @@ bool fetchStop(uint8_t idx) {
     }
   }
 
-  // Collect up to MAX_COLLECT future departures, then sort and keep top 3.
+  // Collect up to MAX_STORED_DEPARTURES future departures, then sort and keep
+  // the top stored set. The TFT will still render only its fixed 3 rows.
   // The API can return events out of estimated-time order when buses run
   // early or late, so we need to sort by actual estimated epoch.
-  constexpr uint8_t MAX_COLLECT = 8;
-  Departure collected[MAX_COLLECT];
+  Departure collected[MAX_STORED_DEPARTURES];
   uint8_t numCollected = 0;
 
   for (JsonObject ev : events) {
-    if (numCollected >= MAX_COLLECT) break;
+    if (numCollected >= MAX_STORED_DEPARTURES) break;
 
     const char* estStr     = ev["departureTimeEstimated"];
     const char* plannedStr = ev["departureTimePlanned"];
@@ -268,8 +268,8 @@ bool fetchStop(uint8_t idx) {
     }
   }
 
-  // Copy the top DEPARTURES_PER_STOP into stopData
-  uint8_t count = (numCollected < DEPARTURES_PER_STOP) ? numCollected : DEPARTURES_PER_STOP;
+  // Copy the top MAX_STORED_DEPARTURES into stopData for TFT + WebUI consumers.
+  uint8_t count = (numCollected < MAX_STORED_DEPARTURES) ? numCollected : MAX_STORED_DEPARTURES;
   for (uint8_t i = 0; i < count; i++) {
     stopData[idx].departures[i] = collected[i];
   }
@@ -311,4 +311,3 @@ void recalcMinutes() {
     }
   }
 }
-

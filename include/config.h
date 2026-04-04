@@ -6,7 +6,9 @@
 // Stop configuration
 // ---------------------------------------------------------------------------
 constexpr uint8_t     STOP_COUNT          = 4;
-constexpr uint8_t     DEPARTURES_PER_STOP = 3;
+constexpr uint8_t     TFT_DEPARTURES_PER_STOP   = 3;
+constexpr uint8_t     MAX_STORED_DEPARTURES     = 8;
+constexpr uint8_t     WEBUI_DEPARTURES_DEFAULT  = 3;
 
 constexpr uint8_t STOP_ID_MAX   = 16;
 constexpr uint8_t STOP_NAME_MAX = 24;
@@ -29,6 +31,7 @@ extern char stopIds[STOP_COUNT][STOP_ID_MAX];
 extern char stopNames[STOP_COUNT][STOP_NAME_MAX];
 extern uint8_t displayBrightness;
 extern bool    time24Hour;
+extern uint8_t webuiDepartureCount;
 
 void initStopConfig();
 void initUserSettings();
@@ -36,6 +39,7 @@ void initUserSettings();
 bool setStopConfig(uint8_t idx, const char* stopId, const char* stopName);
 bool setDisplayBrightnessSetting(uint8_t brightness);
 bool setTime24HourSetting(bool enabled);
+bool setWebuiDepartureCountSetting(uint8_t count);
 
 bool saveStopConfig();
 bool saveUserSettings();

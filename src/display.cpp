@@ -102,7 +102,7 @@ void drawStopPanel(uint8_t idx) {
     return;
   }
 
-  for (uint8_t i = 0; i < sd.count && i < DEPARTURES_PER_STOP; i++) {
+  for (uint8_t i = 0; i < sd.count && i < TFT_DEPARTURES_PER_STOP; i++) {
     const Departure& dep = sd.departures[i];
     int rowY = py + ROW_NAME_H + (i * ROW_DEP_H) + 4;
 

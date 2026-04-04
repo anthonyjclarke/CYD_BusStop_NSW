@@ -2,20 +2,60 @@
 
 ESP32 bus stop notifier for the **ESP32-2432S028R (CYD 2.8")** displaying live NSW bus departures for four configurable stops near Ryde/Putney. Built with PlatformIO and the Arduino framework.
 
+Current release: `0.3.0` (2026-04-05)
+
 ---
 
 ## What It Does
 
-- Fetches the next 3 departures per stop from the TfNSW Trip Planner API
+- Fetches live departures from the TfNSW Trip Planner API for four configured stops
 - Displays all four stops simultaneously in a 2×2 grid (landscape 320×240)
-- TFT shows route · real-time indicator (`●`/`~`) · minutes/day label · clock time
+- TFT shows the next 3 departures per stop: route · real-time indicator (`●`/`~`) · minutes/day label · clock time
 - WebUI shows route · `LIVE`/`SCHED` badge · destination · delay pill · minutes/day label · clock time
+- WebUI departures are configurable from 1 to 8 rows per stop
 - Departures sorted by estimated time — soonest first
 - Non-today departures show a day abbreviation (Mon, Tue, etc.) instead of minutes
 - Late/early bus indicators on WebUI (e.g. "+4m late", "3m early")
 - Service alert banner on WebUI when TfNSW returns disruption info
 - Live time and date header, updated every second via NTP
-- Web interface at the device IP: live dashboard, JSON state API, stop editor
+- Web interface at the device IP: live dashboard, `/config` page, JSON state API
+
+---
+
+## Display Layout
+
+### TFT Dashboard
+
+![TFT dashboard](images/cyd-screenshot.png)
+
+The 2×2 grid shows four stops simultaneously. Each departure row displays:
+route number, real-time indicator (`●` green = GPS-tracked, `~` grey = scheduled),
+minutes until arrival (green <10 min, yellow >=10 min, orange = Now), and clock time.
+Non-today departures show a day abbreviation (Mon, Tue, etc.) in grey.
+The footer shows the last successful API fetch time.
+
+### WebUI Dashboard
+
+![WebUI dashboard](images/Webui-departures.png)
+
+The web interface adds destination names, `LIVE`/`SCHED` badges, delay pills
+(orange for late, green for early), service alert banners, and a configurable
+number of departures per stop.
+
+### WebUI Config Page
+
+![WebUI config page](images/webui-config-1.png)
+![WebUI config page](images/webui-config-2.png)
+
+The `/config` page provides:
+- display brightness control
+- 12/24-hour clock toggle
+- WebUI departures-per-stop control (`1` to `8`)
+- runtime stop ID/name editing
+- system stats and raw `/api/state` JSON
+
+Stop changes are persisted to NVS and trigger an immediate data refresh.
+Display settings also persist and apply without reboot.
 
 ---
 
@@ -75,7 +115,7 @@ CYD_BusStop_NSW/
     ├── main.cpp               # setup(), loop(), init orchestration
     ├── display.cpp/.h         # TFT drawing — header, panels, status bar
     ├── bus_api.cpp/.h         # TfNSW API fetch, parse, sort departures
-    ├── config.cpp             # Stop config NVS persistence
+    ├── config.cpp             # NVS persistence for stops + user settings
     ├── time_mgr.cpp/.h        # ezTime NTP init, time/date/day helpers
     └── web_server.cpp/.h      # AsyncWebServer routes, WebUI, JSON API
 ```
@@ -102,6 +142,8 @@ Key tuneable constants:
 | `POLL_INTERVAL_MS`   | `60000`              | Bus API refresh interval     |
 | `BRIGHTNESS_DEFAULT` | `200`                | Backlight (0–255)            |
 | `TIME_24HR_DEFAULT`  | `false`              | 12 hr display                |
+| `WEBUI_DEPARTURES_DEFAULT` | `3`          | Default WebUI rows per stop  |
+| `MAX_STORED_DEPARTURES` | `8`             | Max departures stored/web UI |
 | `WIFI_AP_NAME`       | `"CYD-BusStop"`      | Captive portal AP name       |
 | `OTA_HOSTNAME`       | `"cyd-busstop"`      | mDNS + ArduinoOTA hostname   |
 
@@ -118,9 +160,9 @@ Default stops are defined in `include/config.h`:
 | 211267  | End of Small St   |
 | 211271  | To Macquarie Park |
 
-At runtime, the active stop list is stored in NVS and can be edited from the WebUI.
-Use the "Edit stops" pane on `/` to update stop IDs and display names, or reset back
-to the defaults above.
+At runtime, the active stop list is stored in NVS and can be edited from the WebUI
+config page. Use `/config` to update stop IDs and display names, or reset back to
+the defaults above.
 
 ---
 
@@ -156,41 +198,17 @@ is pre-filled and the device connects automatically if credentials are valid.
 
 ---
 
-## Display Layout
-
-### TFT Dashboard
-
-![TFT dashboard](images/cyd-screenshot.png)
-
-The 2×2 grid shows four stops simultaneously. Each departure row displays:
-route number, real-time indicator (`●` green = GPS-tracked, `~` grey = scheduled),
-minutes until arrival (green <10 min, yellow >=10 min, orange = Now), and clock time.
-Non-today departures show a day abbreviation (Mon, Tue, etc.) in grey.
-The footer shows the last successful API fetch time.
-
-### WebUI Dashboard
-
-![WebUI dashboard](images/webui-dashboard-placeholder.png)
-
-The web interface adds destination names, `LIVE`/`SCHED` badges, delay pills
-(orange for late, green for early), and service alert banners.
-
-### WebUI Stop Editor
-
-![WebUI stop editor](images/webui-editor-placeholder.png)
-
-The "Edit stops" pane allows runtime changes to stop IDs and display names.
-Changes are persisted to NVS and trigger an immediate data refresh.
-
----
-
 ## Web Interface
 
 | Route              | Purpose                                      |
 |:-------------------|:---------------------------------------------|
-| `/`                | Live dashboard + stop editor                 |
+| `/`                | Live departures dashboard                    |
+| `/config`          | Device settings, stop editor, stats, JSON    |
 | `/api/state`       | JSON — time, date, epoch, TZ offset, stops   |
+| `/api/settings`    | JSON — current persisted user settings       |
+| `/api/stats`       | JSON — device stats + WebUI/TFT row counts   |
 | `/api/stops`       | JSON — current runtime stop config           |
+| `/api/settings/reset` | POST — restore default user settings      |
 | `/api/stops/reset` | POST — restore default stop configuration    |
 | `/mirror`          | Redirects to `/`                             |
 
@@ -204,7 +222,9 @@ if your network supports mDNS.
 - Delay pill: `+4m late` (orange) or `3m early` (green), suppressed below 2 min
 - Day abbreviation for non-today departures instead of minutes
 - Alert banner when TfNSW returns service disruption text
-- "Edit stops" pane to update persisted stop IDs and names
+- `/config` page for brightness, 12/24-hour clock, and WebUI row count
+- Stop editor on `/config` to update persisted stop IDs and names
+- WebUI row count configurable from 1 to 8 departures per stop
 - Auto-refresh: API poll every 15s, client-side recalc every 5s
 
 ---
@@ -242,9 +262,9 @@ Debug lines include a wall-clock timestamp after NTP sync, or uptime before sync
 ## Roadmap
 
 - **Phase 1** ✓: WiFi · NTP · TfNSW API · TFT display layout · OTA
-- **Phase 2** ✓ (partial): Web dashboard · NVS stop persistence · live stop
-  editor · real-time indicators · delay/destination/alert display · day labels
-- **Phase 2** (remaining): 12/24 hr toggle · brightness control · full config page
+- **Phase 2** ✓: Web dashboard · NVS stop persistence · config page · display
+  settings · live stop editor · real-time indicators · delay/destination/alert
+  display · day labels · configurable WebUI row count
 - **Phase 3**: Canvas display mirror at `/mirror` · font upgrade to VLW NotoSans
 
 ---

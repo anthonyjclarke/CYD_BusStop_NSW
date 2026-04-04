@@ -8,12 +8,14 @@ char stopIds[STOP_COUNT][STOP_ID_MAX];
 char stopNames[STOP_COUNT][STOP_NAME_MAX];
 uint8_t displayBrightness = BRIGHTNESS_DEFAULT;
 bool    time24Hour       = TIME_24HR_DEFAULT;
+uint8_t webuiDepartureCount = WEBUI_DEPARTURES_DEFAULT;
 
 static const char* PREF_NAMESPACE = "busstop";
 static const char* PREF_COUNT_KEY = "count";
 static const char* PREF_SIG_KEY   = "defsSig";
 static const char* PREF_BRIGHTNESS_KEY = "bright";
 static const char* PREF_TIME24_KEY     = "time24";
+static const char* PREF_WEBUI_DEPS_KEY = "webdeps";
 
 static uint32_t hashBytes(uint32_t hash, const char* s) {
   while (s && *s) {
@@ -108,6 +110,14 @@ bool setTime24HourSetting(bool enabled) {
   return true;
 }
 
+bool setWebuiDepartureCountSetting(uint8_t count) {
+  if (count == 0 || count > MAX_STORED_DEPARTURES) {
+    return false;
+  }
+  webuiDepartureCount = count;
+  return true;
+}
+
 bool saveStopConfig() {
   Preferences prefs;
   if (!prefs.begin(PREF_NAMESPACE, false)) {
@@ -137,10 +147,11 @@ bool saveUserSettings() {
 
   prefs.putUChar(PREF_BRIGHTNESS_KEY, displayBrightness);
   prefs.putBool(PREF_TIME24_KEY, time24Hour);
+  prefs.putUChar(PREF_WEBUI_DEPS_KEY, webuiDepartureCount);
 
   prefs.end();
-  DBG_INFO("User settings: saved brightness=%u, time24=%s",
-           displayBrightness, time24Hour ? "true" : "false");
+  DBG_INFO("User settings: saved brightness=%u, time24=%s, webuiDeps=%u",
+           displayBrightness, time24Hour ? "true" : "false", webuiDepartureCount);
   return true;
 }
 
@@ -190,13 +201,23 @@ bool loadUserSettings() {
     return false;
   }
 
-  if (!prefs.isKey(PREF_BRIGHTNESS_KEY) || !prefs.isKey(PREF_TIME24_KEY)) {
+  bool hasBrightness = prefs.isKey(PREF_BRIGHTNESS_KEY);
+  bool hasTime24     = prefs.isKey(PREF_TIME24_KEY);
+  bool hasWebuiDeps  = prefs.isKey(PREF_WEBUI_DEPS_KEY);
+
+  if (!hasBrightness && !hasTime24 && !hasWebuiDeps) {
     prefs.end();
     return false;
   }
 
   displayBrightness = prefs.getUChar(PREF_BRIGHTNESS_KEY, BRIGHTNESS_DEFAULT);
   time24Hour = prefs.getBool(PREF_TIME24_KEY, TIME_24HR_DEFAULT);
+  uint8_t storedWebuiDeps = prefs.getUChar(PREF_WEBUI_DEPS_KEY, WEBUI_DEPARTURES_DEFAULT);
+  if (storedWebuiDeps == 0 || storedWebuiDeps > MAX_STORED_DEPARTURES) {
+    webuiDepartureCount = WEBUI_DEPARTURES_DEFAULT;
+  } else {
+    webuiDepartureCount = storedWebuiDeps;
+  }
 
   prefs.end();
   return true;
@@ -205,5 +226,6 @@ bool loadUserSettings() {
 bool resetUserSettings() {
   displayBrightness = BRIGHTNESS_DEFAULT;
   time24Hour = TIME_24HR_DEFAULT;
+  webuiDepartureCount = WEBUI_DEPARTURES_DEFAULT;
   return true;
 }
