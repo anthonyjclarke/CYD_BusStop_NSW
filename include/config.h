@@ -3,6 +3,24 @@
 #include <Arduino.h>
 
 // ---------------------------------------------------------------------------
+// Firmware identity — read by the web installer (manifest + Improv)
+// ---------------------------------------------------------------------------
+#define FIRMWARE_VERSION "0.4.0-dev"
+#define PROJECT_NAME     "CYD_BusStop_NSW"  // frozen: Improv + manifest name
+#define PROJECT_REPO_URL "https://github.com/anthonyjclarke/CYD_BusStop_NSW"
+
+// ---------------------------------------------------------------------------
+// Local secrets — optional. CI and installer images build without secrets.h.
+// SECRET_TFNSW_API_KEY, if set, seeds NVS once on a board with no stored key.
+// ---------------------------------------------------------------------------
+#if __has_include("secrets.h")
+#include "secrets.h"
+#endif
+#ifndef SECRET_TFNSW_API_KEY
+#define SECRET_TFNSW_API_KEY ""
+#endif
+
+// ---------------------------------------------------------------------------
 // Stop configuration
 // ---------------------------------------------------------------------------
 constexpr uint8_t     STOP_COUNT          = 4;
@@ -72,7 +90,11 @@ constexpr uint32_t INTER_REQUEST_MS    = 500;     // gap between sequential stop
 // ---------------------------------------------------------------------------
 // WiFi / provisioning
 // ---------------------------------------------------------------------------
-constexpr const char* WIFI_AP_NAME = "CYD-BusStop";
+#define AP_NAME "CYD-BusStop"
+constexpr const char* WIFI_AP_NAME = AP_NAME;
+
+#define IMPROV_SETUP_ENABLED 1
+#define IMPROV_DEVICE_PREFIX "BusStop"
 
 // ---------------------------------------------------------------------------
 // Time

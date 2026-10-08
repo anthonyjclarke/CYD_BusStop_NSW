@@ -2,7 +2,6 @@
 #include "time_mgr.h"
 #include "../include/config.h"
 #include "../include/debug.h"
-#include "../include/secrets.h"
 
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>

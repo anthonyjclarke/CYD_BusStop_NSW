@@ -4,7 +4,6 @@
 
 #include "../include/config.h"
 #include "../include/debug.h"
-#include "../include/secrets.h"
 
 #include "display.h"
 #include "time_mgr.h"
@@ -30,15 +29,6 @@ static void performBusRefresh() {
 static void initWiFi() {
   WiFiManager wm;
   wm.setConfigPortalTimeout(180);  // 3 min AP timeout — restarts if no connection
-
-  // Seed credentials from secrets.h if provided — pre-fills the portal form
-  if (strlen(SECRET_WIFI_SSID) > 0) {
-    wm.setConfigPortalTimeout(0);  // wait indefinitely when seeds are set
-    WiFiManagerParameter p_ssid("ssid", "SSID", SECRET_WIFI_SSID, 64);
-    WiFiManagerParameter p_pass("pass", "Password", SECRET_WIFI_PASS, 64);
-    wm.addParameter(&p_ssid);
-    wm.addParameter(&p_pass);
-  }
 
   if (!wm.autoConnect(WIFI_AP_NAME)) {
     DBG_ERROR("WiFiManager failed to connect — restarting");
