@@ -23,6 +23,7 @@ static void handleApiState(AsyncWebServerRequest* req) {
   doc["now"]   = (long)getUTCNow();
   doc["tzOff"] = getLocalTZOffset();
   doc["webuiDepartureCount"] = webuiDepartureCount;
+  doc["apiKey"] = apiKeyStatus();  // status only — the key itself is never sent
 
   JsonArray stops = doc.createNestedArray("stops");
   for (uint8_t i = 0; i < STOP_COUNT; i++) {
@@ -82,6 +83,7 @@ static void handleApiSettings(AsyncWebServerRequest* req) {
   doc["webuiDepartureCount"]        = webuiDepartureCount;
   doc["webuiDepartureCountDefault"] = WEBUI_DEPARTURES_DEFAULT;
   doc["webuiDepartureCountMax"]     = MAX_STORED_DEPARTURES;
+  doc["apiKeySet"]                  = hasApiKey();
 
   String body;
   serializeJson(doc, body);
@@ -249,6 +251,32 @@ static void handleApiSettingsUpdate(AsyncWebServerRequest* req, uint8_t* data, s
   req->send(200, "application/json", "{\"result\":\"ok\"}");
 }
 
+// Body: {"key":"..."}; an empty key clears it. Write-only — never echoed back.
+static void handleApiKeyUpdate(AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+  if (index != 0 || len != total) {
+    req->send(413, "application/json", "{\"error\":\"Body too large\"}");
+    return;
+  }
+
+  DynamicJsonDocument doc(256);
+  DeserializationError err = deserializeJson(doc, data, len);
+  if (err || !doc["key"].is<const char*>()) {
+    req->send(400, "application/json", "{\"error\":\"Expected {\\\"key\\\":\\\"...\\\"}\"}");
+    return;
+  }
+
+  if (!setApiKey(doc["key"].as<const char*>())) {
+    req->send(400, "application/json",
+              "{\"error\":\"Key must be printable characters, no spaces, under 256\"}");
+    return;
+  }
+
+  s_stopRefreshRequested = true;  // fetch now with the new key
+  req->send(200, "application/json", hasApiKey()
+            ? "{\"result\":\"saved\",\"apiKeySet\":true}"
+            : "{\"result\":\"cleared\",\"apiKeySet\":false}");
+}
+
 static const char ROOT_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
@@ -327,6 +355,8 @@ function render(){
   var nowUTC=D.now+age;
   var tzOff=D.tzOff||0;
   var ah='';
+  if(D.apiKey==='missing')ah+='<div class="alert">&#9888; No TfNSW API key set. <a href="/config">Add it on Config</a> to load departures.</div>';
+  else if(D.apiKey==='rejected')ah+='<div class="alert">&#9888; TfNSW rejected the API key. <a href="/config">Check it on Config</a>.</div>';
   D.stops.forEach(function(s){
     if(s.alert)ah+='<div class="alert">&#9888; '+s.alert+'</div>';
   });
@@ -401,7 +431,7 @@ button,input{font:inherit}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .field{margin-bottom:12px}
 .field label{display:block;font-family:"Avenir Next","Trebuchet MS",sans-serif;font-size:.82rem;color:var(--muted);margin-bottom:.35rem}
-.field input[type="text"]{width:100%;padding:.65rem .7rem;border:1px solid #cfc5b3;border-radius:12px;background:#fff}
+.field input[type="text"],.field input[type="password"]{width:100%;padding:.65rem .7rem;border:1px solid #cfc5b3;border-radius:12px;background:#fff}
 .stoprow{display:grid;grid-template-columns:130px 1fr;gap:10px;margin-bottom:10px}
 .rangeWrap{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
 .rangeWrap input[type="range"]{width:100%}
@@ -426,6 +456,21 @@ pre{white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto;ba
   <a class="back" href="/">Back to departures</a>
 </div>
 <div class="grid">
+  <section class="card">
+    <h2>TfNSW API Key</h2>
+    <div class="sub" id="apiKeyState" style="margin:0 0 10px">--</div>
+    <div class="field">
+      <label for="apiKey">New key &ndash; stored on the device, never shown again</label>
+      <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your Trip Planner API key">
+    </div>
+    <div class="actions">
+      <button class="btn primary" onclick="saveApiKey()">Save key</button>
+      <button class="btn" onclick="clearApiKey()">Clear key</button>
+    </div>
+    <div class="sub">Free from <a href="https://opendata.transport.nsw.gov.au" target="_blank" rel="noopener">opendata.transport.nsw.gov.au</a>: create an application with the <b>Trip Planner APIs</b> product.</div>
+    <div class="status" id="apiKeyStatus"></div>
+  </section>
+
   <section class="card">
     <h2>System Stats</h2>
     <div class="stats">
@@ -506,8 +551,31 @@ function fmtFetchAge(sec){
   if(sec<3600)return Math.round(sec/60)+'m ago';
   return Math.round(sec/3600)+'h ago';
 }
+function showKeyState(set){
+  document.getElementById('apiKeyState').textContent=set?'A key is stored on the device.':'No key set \u2013 departures cannot load until you add one.';
+}
+function postApiKey(k,msg){
+  fetch('/api/apikey',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})})
+  .then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d;});})
+  .then(function(d){
+    document.getElementById('apiKey').value='';
+    showKeyState(d.apiKeySet);
+    document.getElementById('apiKeyStatus').textContent=msg;
+  }).catch(function(e){
+    document.getElementById('apiKeyStatus').textContent='Save failed: '+e.message;
+  });
+}
+function saveApiKey(){
+  var k=document.getElementById('apiKey').value.trim();
+  if(!k){document.getElementById('apiKeyStatus').textContent='Paste a key first';return;}
+  postApiKey(k,'Key saved, refresh queued');
+}
+function clearApiKey(){
+  if(confirm('Remove the stored API key?'))postApiKey('','Key cleared');
+}
 function loadSettings(){
   fetch('/api/settings').then(function(r){return r.json();}).then(function(d){
+    showKeyState(!!d.apiKeySet);
     document.getElementById('brightness').value=d.brightness;
     document.getElementById('brightnessValue').textContent=d.brightness;
     document.getElementById('time24Hour').checked=!!d.time24Hour;
@@ -667,6 +735,7 @@ void initWebServer() {
   server.on("/api/settings",      HTTP_GET, handleApiSettings);
   server.on("/api/stops",         HTTP_POST, [](AsyncWebServerRequest* req){}, nullptr, handleApiStopsUpdate);
   server.on("/api/settings",      HTTP_POST, [](AsyncWebServerRequest* req){}, nullptr, handleApiSettingsUpdate);
+  server.on("/api/apikey",        HTTP_POST, [](AsyncWebServerRequest* req){}, nullptr, handleApiKeyUpdate);
   server.on("/api/stops/reset",   HTTP_POST, [](AsyncWebServerRequest* req){
     if (!resetStopConfig() || !saveStopConfig()) {
       req->send(500, "application/json", "{\"error\":\"reset failed\"}");

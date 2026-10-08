@@ -30,3 +30,4 @@ void initBusApi();
 bool fetchStop(uint8_t stopIndex);
 void fetchAllStops();      // sequential fetch of all stops with INTER_REQUEST_MS gap
 void recalcMinutes();      // recalculate minutesUntil from stored epoch for all stops
+const char* apiKeyStatus(); // "ok", "missing" or "rejected" (last fetch got 401/403)

@@ -84,6 +84,15 @@ constexpr const char* TFNSW_API_BASE =
   "&depArr=dep"
   "&limit=6";   // cap results — keeps response ~5KB vs ~60KB unbounded
 
+// API key — entered at runtime (portal or /config), stored in NVS, never logged
+// or returned by any endpoint.
+constexpr size_t API_KEY_MAX = 256;  // buffer incl. NUL; TfNSW keys are ~180
+
+void        initApiKey();
+bool        hasApiKey();
+const char* getApiKey();
+bool        setApiKey(const char* key);  // persists; "" clears
+
 constexpr uint32_t POLL_INTERVAL_MS    = 60000;   // 60 s between full refresh cycles
 constexpr uint32_t INTER_REQUEST_MS    = 500;     // gap between sequential stop requests
 
