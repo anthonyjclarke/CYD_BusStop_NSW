@@ -46,6 +46,42 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
 
 ---
 
+## [0.4.0] Unreleased
+
+### Added
+- Browser installer (ESP Web Tools) at
+  `https://anthonyjclarke.github.io/CYD_BusStop_NSW/`, built by the shared
+  `cyd-web-installer` workflow (`.github/workflows/firmware.yml`) on every
+  push; a `v*` tag on `main` publishes the release and the installer page
+- Runtime TfNSW API key entry – a password field in the WiFiManager portal and
+  a write-only card on `/config` (`POST /api/apikey`). Stored in NVS
+  (`busstop/apikey`), never logged or returned by any endpoint
+- No-key and rejected-key states: fetches are skipped without a key, and the
+  TFT footer and dashboard banner point to `/config`; HTTP 401/403 shows
+  "API key rejected". `/api/state` carries `apiKey`, `/api/settings` `apiKeySet`
+- Improv-Serial WiFi provisioning, always on (vendored `lib/ImprovWiFi` and
+  `src/network/improv_setup`), so the installer offers Update on a running
+  board; ticked during the bus fetch as well as in `loop()`
+- `FIRMWARE_VERSION`, `PROJECT_NAME`, `PROJECT_REPO_URL`, `AP_NAME` in
+  `config.h`; boot log shows the running OTA partition
+- `tools/merge_bin.py` post-build script (`flash_parts.json`,
+  `firmware-merged.bin`) and installer labels in `platformio.ini`
+
+### Changed
+- `include/secrets.h` is optional (`__has_include`). A local
+  `SECRET_TFNSW_API_KEY` only seeds NVS once on a board with no stored key
+- Platform pinned to `espressif32@6.12.0` – unpinned resolved to pioarduino
+  3.x, which no longer built
+
+### Removed
+- WiFi pre-fill from `SECRET_WIFI_SSID` / `SECRET_WIFI_PASS` – it added
+  fields WiFiManager ignored and showed the password on the open AP page
+
+### Fixed
+- Improv replies start on a new line (`lib/ImprovWiFi` from cyd-web-installer
+  1.0.1), so serial noise on port open no longer makes Connect offer Install
+  instead of Update
+
 ## [0.3.0] 2026-04-05
 
 ### Added
