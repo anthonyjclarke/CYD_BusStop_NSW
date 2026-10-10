@@ -81,6 +81,8 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
 - Improv replies start on a new line (`lib/ImprovWiFi` from cyd-web-installer
   1.0.1), so serial noise on port open no longer makes Connect offer Install
   instead of Update
+- Improv device name uses the MAC's last two bytes, as printed on labels and
+  router lists (`src/network/improv_setup.cpp` from cyd-web-installer `9457ba6`)
 
 ## [0.3.0] 2026-04-05
 
