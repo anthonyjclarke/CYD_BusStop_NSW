@@ -2,7 +2,7 @@
 
 ESP32 bus stop notifier for the **ESP32-2432S028R (CYD 2.8")** displaying live NSW bus departures for four configurable stops near Ryde/Putney. Built with PlatformIO and the Arduino framework.
 
-Current release: `0.3.0` (2026-04-05)
+Current release: `0.4.0` (10-10-2026)
 
 ---
 

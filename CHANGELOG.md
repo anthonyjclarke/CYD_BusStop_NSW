@@ -1,7 +1,7 @@
 # Changelog
 
 All notable changes to this project will be documented here.
-Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
+Format: `## [version] DD-MM-YYYY` — sections: Added · Changed · Fixed.
 
 ---
 
@@ -46,7 +46,7 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
 
 ---
 
-## [0.4.0] Unreleased
+## [0.4.0] 10-10-2026
 
 ### Added
 - Browser installer (ESP Web Tools) at
@@ -87,7 +87,7 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
 - Improv device name uses the MAC's last two bytes, as printed on labels and
   router lists (`src/network/improv_setup.cpp` from cyd-web-installer `9457ba6`)
 
-## [0.3.0] 2026-04-05
+## [0.3.0] 05-04-2026
 
 ### Added
 - Dedicated `/config` WebUI page for:
@@ -128,7 +128,7 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
 
 ---
 
-## [0.2.4] 2026-04-03
+## [0.2.4] 03-04-2026
 
 ### Added
 - TfNSW departure parsing now captures:
@@ -180,7 +180,7 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
 
 ---
 
-## [0.2.3] 2026-04-02
+## [0.2.3] 02-04-2026
 
 ### Added
 - Runtime-configurable stop list via WebUI:
@@ -198,7 +198,7 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
   - Save and reset buttons with status messages.
   - Client JS syncs with API and updates the live stops display.
 
-## [0.2.2] 2026-04-02
+## [0.2.2] 02-04-2026
 
 ### Added
 - "upd HH:MM" last-fetch indicator — dim grey, bottom-right corner, Font 2.
@@ -207,7 +207,7 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
 
 ---
 
-## [0.2.1] 2026-04-02
+## [0.2.1] 02-04-2026
 
 ### Fixed
 - Bus departure clock times displayed in UTC instead of local Sydney time.
@@ -218,7 +218,7 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
 
 ---
 
-## [0.2.0] 2026-04-01
+## [0.2.0] 01-04-2026
 
 ### Added
 - De-chunking stream wrapper (`DeChunkStream`) for reliable TfNSW API parsing
@@ -254,7 +254,7 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
 
 ---
 
-## [0.1.0] 2026-04-01
+## [0.1.0] 01-04-2026
 
 ### Added
 - Initial project scaffold — PlatformIO, Arduino framework, CYD 2.8" target

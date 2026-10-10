@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 // Firmware identity — read by the web installer (manifest + Improv)
 // ---------------------------------------------------------------------------
-#define FIRMWARE_VERSION "0.4.0-dev"
+#define FIRMWARE_VERSION "0.4.0"
 #define PROJECT_NAME     "CYD_BusStop_NSW"  // frozen: Improv + manifest name
 #define PROJECT_REPO_URL "https://github.com/anthonyjclarke/CYD_BusStop_NSW"
 
