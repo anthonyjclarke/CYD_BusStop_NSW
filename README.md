@@ -1,5 +1,13 @@
 # CYD_BusStop_NSW
 
+<!-- Update version badge when FIRMWARE_VERSION changes in include/config.h -->
+![Version](https://img.shields.io/badge/version-0.5.0--dev-blue.svg)
+![Platform](https://img.shields.io/badge/platform-ESP32-green.svg)
+![PlatformIO](https://img.shields.io/badge/PlatformIO-6.x-orange.svg)
+![Board](https://img.shields.io/badge/CYD-2.8%22-yellow.svg)
+![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)
+![Status](https://img.shields.io/badge/status-working%20on%20hardware-brightgreen.svg)
+
 ESP32 bus stop notifier for the **ESP32-2432S028R (CYD 2.8")** displaying live NSW bus departures for four configurable stops near Ryde/Putney. Built with PlatformIO and the Arduino framework.
 
 Current release: `0.4.0` (10-10-2026)
@@ -317,4 +325,7 @@ Debug lines include a wall-clock timestamp after NTP sync, or uptime before sync
 
 ## Licence
 
-Personal project — not licensed for redistribution.
+MIT – see [`LICENSE`](LICENSE). The vendored Improv library in
+`lib/ImprovWiFi/` keeps its own MIT licence (Jonathas Barbosa). Departure data
+comes from the TfNSW Open Data API and is subject to its terms of use; each
+user supplies their own API key.

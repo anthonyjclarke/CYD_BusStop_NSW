@@ -46,6 +46,16 @@ Format: `## [version] DD-MM-YYYY` — sections: Added · Changed · Fixed.
 
 ---
 
+## [0.5.0] Unreleased
+
+### Added
+- MIT `LICENSE` – the project is now open source
+- README header badges (version, platform, PlatformIO, board, licence, status)
+
+### Changed
+- README licence section: MIT, with the vendored Improv library's own MIT
+  licence and the TfNSW Open Data terms noted
+
 ## [0.4.0] 10-10-2026
 
 ### Added
