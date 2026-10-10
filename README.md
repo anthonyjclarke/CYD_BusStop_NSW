@@ -317,4 +317,7 @@ Debug lines include a wall-clock timestamp after NTP sync, or uptime before sync
 
 ## Licence
 
-Personal project — not licensed for redistribution.
+MIT – see [`LICENSE`](LICENSE). The vendored Improv library in
+`lib/ImprovWiFi/` keeps its own MIT licence (Jonathas Barbosa). Departure data
+comes from the TfNSW Open Data API and is subject to its terms of use; each
+user supplies their own API key.
