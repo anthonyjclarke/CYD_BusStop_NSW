@@ -58,7 +58,9 @@ Smoke-tested only. Run these on the next real work on this project, or before
 the next release, and tick them off with date and board MAC.
 
 - [x] Case 1 – fresh install, erased (only board env) – 10-10-2026, `b0:cb:d8:da:ae:8c`
-- [ ] Case 2 – Update on a provisioned board (settings, stops and API key kept)
+- [x] Case 2 – Update on a provisioned board – 10-10-2026, `b0:cb:d8:da:ae:8c`:
+  live page offered Update from `0.4.0-dev`, no erase; booted `v0.4.0` from
+  `app0` with stops, settings, API key and WiFi kept
 - [ ] Case 3 – Update from `app1` after ArduinoOTA
 
 Cases 4 (wrong board) and 5 (web `/update`) don't apply: one env, and no web
