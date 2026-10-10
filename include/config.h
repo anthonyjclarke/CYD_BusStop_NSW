@@ -109,7 +109,11 @@ constexpr const char* WIFI_AP_NAME = AP_NAME;
 // Time
 // ---------------------------------------------------------------------------
 constexpr const char* NTP_HOST   = "pool.ntp.org";  // renamed — ezTime defines NTP_SERVER as a macro
-constexpr const char* TIMEZONE   = "Australia/Sydney";
+constexpr const char* TIMEZONE   = "Australia/Sydney";     // fallback only
+// Applied locally with setPosix(): ezTime setLocation() looks the name up on
+// timezoned.rop.nl, which often times out on the CYD and leaves the clock on UTC.
+// Rule from macOS /usr/share/zoneinfo/Australia/Sydney.
+constexpr const char* TIMEZONE_POSIX = "AEST-10AEDT,M10.1.0,M4.1.0/3";
 
 // ---------------------------------------------------------------------------
 // Display

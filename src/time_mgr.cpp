@@ -8,6 +8,11 @@ static char     s_dateBuffer[20];
 static char     s_logTimeBuffer[10];
 
 bool initTime() {
+  if (!myTZ.setPosix(TIMEZONE_POSIX)) {
+    DBG_WARN("Bad TIMEZONE_POSIX - falling back to setLocation(%s)", TIMEZONE);
+    myTZ.setLocation(TIMEZONE);
+  }
+
   DBG_INFO("Waiting for NTP sync (30s timeout)...");
   waitForSync(30);
 
@@ -16,7 +21,6 @@ bool initTime() {
     return false;
   }
 
-  myTZ.setLocation(F(TIMEZONE));
   DBG_INFO("Time synced: %s", myTZ.dateTime().c_str());
   return true;
 }

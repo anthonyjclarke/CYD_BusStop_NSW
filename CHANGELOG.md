@@ -78,6 +78,9 @@ Format: `## [version] YYYY-MM-DD` — sections: Added · Changed · Fixed.
   fields WiFiManager ignored and showed the password on the open AP page
 
 ### Fixed
+- Timezone set locally with `setPosix(TIMEZONE_POSIX)` before NTP sync. ezTime
+  `setLocation()` relies on timezoned.rop.nl, which often times out on the CYD
+  and silently left times on UTC; it is now only a fallback
 - Improv replies start on a new line (`lib/ImprovWiFi` from cyd-web-installer
   1.0.1), so serial noise on port open no longer makes Connect offer Install
   instead of Update
