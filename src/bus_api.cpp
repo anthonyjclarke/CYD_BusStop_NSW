@@ -2,7 +2,7 @@
 #include "time_mgr.h"
 #include "../include/config.h"
 #include "../include/debug.h"
-#include "../include/secrets.h"
+#include "network/improv_setup.h"
 
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
@@ -11,6 +11,8 @@
 #include <time.h>
 
 StopData stopData[STOP_COUNT];
+
+static bool s_apiKeyRejected = false;  // last response was 401/403
 
 // ---------------------------------------------------------------------------
 // De-chunking stream wrapper
@@ -46,6 +48,7 @@ class DeChunkStream : public Stream {
     unsigned long start = millis();
     while (!_src.available()) {
       if (millis() - start > 10000) return -1;
+      improvTick();  // keep Improv answering during the ~10 s fetch cycle
       delay(1);
     }
     return _src.read();
@@ -144,15 +147,20 @@ bool fetchStop(uint8_t idx) {
 
   HTTPClient http;
   http.begin(client, url);
-  http.addHeader("Authorization", "apikey " SECRET_TFNSW_API_KEY);
+  String auth = "apikey ";
+  auth += getApiKey();
+  http.addHeader("Authorization", auth);
   http.setTimeout(15000);
 
   int code = http.GET();
   if (code != HTTP_CODE_OK) {
-    DBG_WARN("fetchStop[%d] HTTP %d", idx, code);
+    s_apiKeyRejected = (code == 401 || code == 403);
+    DBG_WARN("fetchStop[%d] HTTP %d%s", idx, code,
+             s_apiKeyRejected ? " - API key rejected" : "");
     http.end();
     return false;
   }
+  s_apiKeyRejected = false;
 
   int contentLen = http.getSize();
   bool chunked   = (contentLen < 0);
@@ -291,13 +299,28 @@ bool fetchStop(uint8_t idx) {
 }
 
 void fetchAllStops() {
+  if (!hasApiKey()) {
+    DBG_WARN("No TfNSW API key - skipping fetch");
+    return;
+  }
+
   DBG_INFO("Fetching all %d stops...", STOP_COUNT);
   for (uint8_t i = 0; i < STOP_COUNT; i++) {
     fetchStop(i);
+    if (s_apiKeyRejected) break;  // same key for every stop
     if (i < STOP_COUNT - 1) {
-      delay(INTER_REQUEST_MS);
+      uint32_t start = millis();
+      while (millis() - start < INTER_REQUEST_MS) {
+        improvTick();
+        delay(5);
+      }
     }
   }
+}
+
+const char* apiKeyStatus() {
+  if (!hasApiKey()) return "missing";
+  return s_apiKeyRejected ? "rejected" : "ok";
 }
 
 void recalcMinutes() {

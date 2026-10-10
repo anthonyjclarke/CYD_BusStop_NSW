@@ -1,26 +1,43 @@
 #include <Arduino.h>
 #include <WiFiManager.h>
 #include <ArduinoOTA.h>
+#include <esp_ota_ops.h>
 
 #include "../include/config.h"
 #include "../include/debug.h"
-#include "../include/secrets.h"
 
 #include "display.h"
 #include "time_mgr.h"
 #include "bus_api.h"
 #include "web_server.h"
+#include "network/improv_setup.h"
 
 static uint32_t s_lastPoll         = 0;
 static uint32_t s_lastClockUpdate  = 0;
 static uint32_t s_lastPanelRefresh = 0;
 static char     s_lastFetchStr[6]  = "--:--";  // local HH:MM of last API fetch
 
+// Footer: last-fetch time, or where to fix a missing/rejected API key.
+static void drawFooter() {
+  const char* st = apiKeyStatus();
+  if (strcmp(st, "ok") == 0) {
+    drawLastUpdated(s_lastFetchStr);
+    return;
+  }
+  char msg[48];
+  snprintf(msg, sizeof(msg), "%s - %s/config",
+           strcmp(st, "missing") == 0 ? "No API key" : "API key rejected",
+           WiFi.localIP().toString().c_str());
+  drawStatusBar(msg, TFT_ORANGE);
+}
+
 static void performBusRefresh() {
   fetchAllStops();
-  formatLocalHHMM(getUTCNow(), s_lastFetchStr, sizeof(s_lastFetchStr));
+  if (strcmp(apiKeyStatus(), "ok") == 0) {
+    formatLocalHHMM(getUTCNow(), s_lastFetchStr, sizeof(s_lastFetchStr));
+  }
   drawAllStops();
-  drawLastUpdated(s_lastFetchStr);
+  drawFooter();
 }
 
 // ---------------------------------------------------------------------------
@@ -31,16 +48,28 @@ static void initWiFi() {
   WiFiManager wm;
   wm.setConfigPortalTimeout(180);  // 3 min AP timeout — restarts if no connection
 
-  // Seed credentials from secrets.h if provided — pre-fills the portal form
-  if (strlen(SECRET_WIFI_SSID) > 0) {
-    wm.setConfigPortalTimeout(0);  // wait indefinitely when seeds are set
-    WiFiManagerParameter p_ssid("ssid", "SSID", SECRET_WIFI_SSID, 64);
-    WiFiManagerParameter p_pass("pass", "Password", SECRET_WIFI_PASS, 64);
-    wm.addParameter(&p_ssid);
-    wm.addParameter(&p_pass);
+  // TfNSW key on the portal's WiFi page. Never pre-filled; saved only if entered.
+  WiFiManagerParameter p_key("apikey", "TfNSW API key (or set later on /config)",
+                             "", API_KEY_MAX - 1, "type='password'");
+  wm.addParameter(&p_key);
+
+#if IMPROV_SETUP_ENABLED
+  wm.setConfigPortalBlocking(false);
+#endif
+  bool connected = wm.autoConnect(AP_NAME);
+#if IMPROV_SETUP_ENABLED
+  while (!connected && wm.getConfigPortalActive()) {
+    if (wm.process()) { connected = true; break; }
+    improvTick();  // restarts once Improv credentials connect
+    delay(5);
+  }
+#endif
+
+  if (strlen(p_key.getValue()) > 0 && !setApiKey(p_key.getValue())) {
+    DBG_WARN("API key from portal rejected (invalid characters or too long)");
   }
 
-  if (!wm.autoConnect(WIFI_AP_NAME)) {
+  if (!connected) {
     DBG_ERROR("WiFiManager failed to connect — restarting");
     delay(1000);
     ESP.restart();
@@ -77,7 +106,9 @@ static void initOTA() {
 
 void setup() {
   Serial.begin(115200);
-  DBG_INFO("=== CYD_BusStop starting ===");
+  improvBegin();
+  DBG_INFO("=== %s v%s starting ===", PROJECT_NAME, FIRMWARE_VERSION);
+  DBG_INFO("Running from %s", esp_ota_get_running_partition()->label);
 
   initDisplay();
 
@@ -89,6 +120,7 @@ void setup() {
 
   initStopConfig();
   initUserSettings();
+  initApiKey();
   setBrightness(displayBrightness);
   initBusApi();
   initWebServer();
@@ -99,7 +131,7 @@ void setup() {
 
   // Initial full draw
   drawHeader(getTimeStr(), getDateStr());
-  drawLastUpdated(s_lastFetchStr);
+  drawFooter();
 
   s_lastPoll        = millis();
   s_lastClockUpdate = millis();
@@ -109,6 +141,7 @@ void setup() {
 }
 
 void loop() {
+  improvTick();
   ArduinoOTA.handle();
   handleWebServer();
 
@@ -126,7 +159,7 @@ void loop() {
     s_lastPanelRefresh = now;
     recalcMinutes();
     drawAllStops();
-    drawLastUpdated(s_lastFetchStr);
+    drawFooter();
   }
 
   // WebUI stop edits queue a refresh so the async request task stays non-blocking.
@@ -139,7 +172,7 @@ void loop() {
   if (consumeDisplayRefreshRequest()) {
     drawHeader(getTimeStr(), getDateStr());
     drawAllStops();
-    drawLastUpdated(s_lastFetchStr);
+    drawFooter();
   }
 
   // Full bus API refresh on poll interval

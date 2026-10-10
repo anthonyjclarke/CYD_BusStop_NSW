@@ -3,6 +3,24 @@
 #include <Arduino.h>
 
 // ---------------------------------------------------------------------------
+// Firmware identity — read by the web installer (manifest + Improv)
+// ---------------------------------------------------------------------------
+#define FIRMWARE_VERSION "0.4.0"
+#define PROJECT_NAME     "CYD_BusStop_NSW"  // frozen: Improv + manifest name
+#define PROJECT_REPO_URL "https://github.com/anthonyjclarke/CYD_BusStop_NSW"
+
+// ---------------------------------------------------------------------------
+// Local secrets — optional. CI and installer images build without secrets.h.
+// SECRET_TFNSW_API_KEY, if set, seeds NVS once on a board with no stored key.
+// ---------------------------------------------------------------------------
+#if __has_include("secrets.h")
+#include "secrets.h"
+#endif
+#ifndef SECRET_TFNSW_API_KEY
+#define SECRET_TFNSW_API_KEY ""
+#endif
+
+// ---------------------------------------------------------------------------
 // Stop configuration
 // ---------------------------------------------------------------------------
 constexpr uint8_t     STOP_COUNT          = 4;
@@ -66,19 +84,36 @@ constexpr const char* TFNSW_API_BASE =
   "&depArr=dep"
   "&limit=6";   // cap results — keeps response ~5KB vs ~60KB unbounded
 
+// API key — entered at runtime (portal or /config), stored in NVS, never logged
+// or returned by any endpoint.
+constexpr size_t API_KEY_MAX = 256;  // buffer incl. NUL; TfNSW keys are ~180
+
+void        initApiKey();
+bool        hasApiKey();
+const char* getApiKey();
+bool        setApiKey(const char* key);  // persists; "" clears
+
 constexpr uint32_t POLL_INTERVAL_MS    = 60000;   // 60 s between full refresh cycles
 constexpr uint32_t INTER_REQUEST_MS    = 500;     // gap between sequential stop requests
 
 // ---------------------------------------------------------------------------
 // WiFi / provisioning
 // ---------------------------------------------------------------------------
-constexpr const char* WIFI_AP_NAME = "CYD-BusStop";
+#define AP_NAME "CYD-BusStop"
+constexpr const char* WIFI_AP_NAME = AP_NAME;
+
+#define IMPROV_SETUP_ENABLED 1
+#define IMPROV_DEVICE_PREFIX "BusStop"
 
 // ---------------------------------------------------------------------------
 // Time
 // ---------------------------------------------------------------------------
 constexpr const char* NTP_HOST   = "pool.ntp.org";  // renamed — ezTime defines NTP_SERVER as a macro
-constexpr const char* TIMEZONE   = "Australia/Sydney";
+constexpr const char* TIMEZONE   = "Australia/Sydney";     // fallback only
+// Applied locally with setPosix(): ezTime setLocation() looks the name up on
+// timezoned.rop.nl, which often times out on the CYD and leaves the clock on UTC.
+// Rule from macOS /usr/share/zoneinfo/Australia/Sydney.
+constexpr const char* TIMEZONE_POSIX = "AEST-10AEDT,M10.1.0,M4.1.0/3";
 
 // ---------------------------------------------------------------------------
 // Display

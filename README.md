@@ -2,7 +2,39 @@
 
 ESP32 bus stop notifier for the **ESP32-2432S028R (CYD 2.8")** displaying live NSW bus departures for four configurable stops near Ryde/Putney. Built with PlatformIO and the Arduino framework.
 
-Current release: `0.3.0` (2026-04-05)
+Current release: `0.4.0` (10-10-2026)
+
+---
+
+## Install
+
+**[anthonyjclarke.github.io/CYD_BusStop_NSW][installer]** installs the latest
+release from the browser – no PlatformIO, no drivers to build. It needs desktop
+Chrome, Edge or Opera.
+
+1. Plug the CYD in with a USB **data** cable, click **Connect & install** and
+   choose its port.
+2. On a new board, say yes to erasing it. When flashing finishes, choose
+   **Configure WiFi** and pick your network. (Or skip it: the board opens a
+   `CYD-BusStop` WiFi hotspot with a setup page.)
+3. **Visit device** opens the departures page. It says no API key is set –
+   follow its link to **Config**, paste your TfNSW key (below) and save.
+   Departures load straight away.
+
+**You need your own free TfNSW API key** – the firmware ships without one. Get
+it as described in [TfNSW API Key](#tfnsw-api-key). The key is stored on the
+device, is never shown again, and survives updates. You can also paste it into
+the hotspot's setup page.
+
+A board already running this firmware is recognised and offered **Update**,
+which keeps its settings, stops, API key and WiFi. If Connect offers
+**Install** instead, the board was probably mid-fetch – close the dialog and
+connect again. Each [release][releases] also carries the images for flashing
+by hand: `*-firmware.bin` is the app alone (for OTA), and `*-merged.bin` is a clean install at `0x0` that **erases settings,
+the API key and WiFi**.
+
+[installer]: https://anthonyjclarke.github.io/CYD_BusStop_NSW/
+[releases]: https://github.com/anthonyjclarke/CYD_BusStop_NSW/releases
 
 ---
 
@@ -82,7 +114,9 @@ This project uses the **TfNSW Open Data Trip Planner API** (Departure Monitor en
 3. Give the application a name (e.g. `CYD BusStop`) and request access to the
    **Trip Planner APIs** product
 4. Once approved (usually instant), copy the API key from the application detail page
-5. Paste it into `include/secrets.h` as `SECRET_TFNSW_API_KEY` (see [Configuration](#configuration))
+5. Paste it on the device's `/config` page (**TfNSW API Key** card) or in the
+   WiFi setup portal. It is stored in NVS, never logged, and never returned by
+   the web API – `/config` only shows whether one is set
 
 The key is sent as an HTTP header: `Authorization: apikey <your-key>`.
 Requests are made to:
@@ -110,26 +144,31 @@ CYD_BusStop_NSW/
 ├── include/
 │   ├── config.h               # Stop IDs, API constants, display defaults
 │   ├── debug.h                # Leveled DBG_* macros with wall-clock timestamps
-│   └── secrets.h              # Gitignored — WiFi + API credentials
+│   └── secrets.h              # Optional, gitignored — local default API key
+├── lib/ImprovWiFi/            # Improv-Serial library (cyd-web-installer copy-in)
+├── tools/merge_bin.py         # Post-build: flash_parts.json + merged image
+├── .github/workflows/         # Firmware CI + release (cyd-web-installer)
 └── src/
     ├── main.cpp               # setup(), loop(), init orchestration
     ├── display.cpp/.h         # TFT drawing — header, panels, status bar
     ├── bus_api.cpp/.h         # TfNSW API fetch, parse, sort departures
     ├── config.cpp             # NVS persistence for stops + user settings
     ├── time_mgr.cpp/.h        # ezTime NTP init, time/date/day helpers
-    └── web_server.cpp/.h      # AsyncWebServer routes, WebUI, JSON API
+    ├── web_server.cpp/.h      # AsyncWebServer routes, WebUI, JSON API
+    └── network/improv_setup.* # Always-on Improv-Serial (web installer)
 ```
 
 ---
 
 ## Configuration
 
-### `include/secrets.h` (gitignored — create before first build)
+### `include/secrets.h` (optional, gitignored)
+
+The firmware builds and runs without it. For your own local builds you can
+set a default key, which is copied to NVS once on a board that has none:
 
 ```cpp
 #pragma once
-#define SECRET_WIFI_SSID     "your-ssid"
-#define SECRET_WIFI_PASS     "your-password"
 #define SECRET_TFNSW_API_KEY "your-tfnsw-api-key"
 ```
 
@@ -144,7 +183,8 @@ Key tuneable constants:
 | `TIME_24HR_DEFAULT`  | `false`              | 12 hr display                |
 | `WEBUI_DEPARTURES_DEFAULT` | `3`          | Default WebUI rows per stop  |
 | `MAX_STORED_DEPARTURES` | `8`             | Max departures stored/web UI |
-| `WIFI_AP_NAME`       | `"CYD-BusStop"`      | Captive portal AP name       |
+| `AP_NAME`            | `"CYD-BusStop"`      | Captive portal AP name       |
+| `TIMEZONE_POSIX`     | Sydney rule          | Local time (set with `setPosix`) |
 | `OTA_HOSTNAME`       | `"cyd-busstop"`      | mDNS + ArduinoOTA hostname   |
 
 ---
@@ -184,17 +224,19 @@ pio device monitor
 
 Upload speed is set to 230400 baud. Port is auto-detected by PlatformIO.
 
+**Never publish a local build.** It compiles in your `secrets.h` key. Release
+images come only from CI on a `v*` tag, which builds without `secrets.h`.
+
 ---
 
 ## First Boot
 
 1. Power on — the display shows `Connecting WiFi...`
-2. Connect to the `CYD-BusStop` AP from your phone or computer
-3. Complete the captive portal with your WiFi credentials
-4. The device connects, syncs time, fetches buses, and draws the display
-
-If `SECRET_WIFI_SSID` / `SECRET_WIFI_PASS` are set in `secrets.h`, the portal
-is pre-filled and the device connects automatically if credentials are valid.
+2. Provision WiFi either from the web installer (**Configure WiFi**, over USB)
+   or by joining the `CYD-BusStop` AP and completing the captive portal. The
+   portal also has an optional **TfNSW API key** field
+3. The device connects, syncs time, fetches buses, and draws the display
+4. With no API key, the footer shows `No API key - <ip>/config` – add it there
 
 ---
 
@@ -210,6 +252,7 @@ is pre-filled and the device connects automatically if credentials are valid.
 | `/api/stops`       | JSON — current runtime stop config           |
 | `/api/settings/reset` | POST — restore default user settings      |
 | `/api/stops/reset` | POST — restore default stop configuration    |
+| `/api/apikey`      | POST `{"key":"…"}` — store key; `""` clears  |
 | `/mirror`          | Redirects to `/`                             |
 
 Access via the device IP shown in serial output, or `http://cyd-busstop.local/`
@@ -230,6 +273,9 @@ if your network supports mDNS.
 ---
 
 ## OTA Updates
+
+**Web installer** — **Update** from the [installer page][installer] keeps all
+settings (see [Install](#install)).
 
 **ArduinoOTA** — upload directly from PlatformIO during development:
 ```bash

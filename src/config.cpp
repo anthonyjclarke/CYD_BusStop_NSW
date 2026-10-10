@@ -16,6 +16,9 @@ static const char* PREF_SIG_KEY   = "defsSig";
 static const char* PREF_BRIGHTNESS_KEY = "bright";
 static const char* PREF_TIME24_KEY     = "time24";
 static const char* PREF_WEBUI_DEPS_KEY = "webdeps";
+static const char* PREF_APIKEY_KEY     = "apikey";
+
+static char s_apiKey[API_KEY_MAX] = "";
 
 static uint32_t hashBytes(uint32_t hash, const char* s) {
   while (s && *s) {
@@ -227,5 +230,65 @@ bool resetUserSettings() {
   displayBrightness = BRIGHTNESS_DEFAULT;
   time24Hour = TIME_24HR_DEFAULT;
   webuiDepartureCount = WEBUI_DEPARTURES_DEFAULT;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// TfNSW API key — never log or return the value
+// ---------------------------------------------------------------------------
+
+void initApiKey() {
+  Preferences prefs;
+  if (prefs.begin(PREF_NAMESPACE, true)) {
+    if (prefs.isKey(PREF_APIKEY_KEY)) {
+      prefs.getString(PREF_APIKEY_KEY, s_apiKey, sizeof(s_apiKey));
+    }
+    prefs.end();
+  }
+
+  // Local builds only: seed NVS once from secrets.h, so the key survives a
+  // later update to a CI image (which has no secrets.h).
+  if (s_apiKey[0] == '\0' && strlen(SECRET_TFNSW_API_KEY) > 0) {
+    DBG_INFO("API key: seeding NVS from local secrets.h");
+    setApiKey(SECRET_TFNSW_API_KEY);
+  }
+
+  DBG_INFO("API key: %s", hasApiKey() ? "stored" : "missing - set it on /config");
+}
+
+bool hasApiKey() {
+  return s_apiKey[0] != '\0';
+}
+
+const char* getApiKey() {
+  return s_apiKey;
+}
+
+bool setApiKey(const char* key) {
+  if (key == nullptr || strlen(key) >= API_KEY_MAX) {
+    return false;
+  }
+  // Printable ASCII only, no spaces — it goes into an HTTP header
+  for (const char* c = key; *c; c++) {
+    if (*c < 0x21 || *c > 0x7e) {
+      return false;
+    }
+  }
+
+  Preferences prefs;
+  if (!prefs.begin(PREF_NAMESPACE, false)) {
+    DBG_ERROR("API key: prefs.begin failed");
+    return false;
+  }
+  if (key[0] == '\0') {
+    prefs.remove(PREF_APIKEY_KEY);
+  } else {
+    prefs.putString(PREF_APIKEY_KEY, key);
+  }
+  prefs.end();
+
+  strncpy(s_apiKey, key, sizeof(s_apiKey) - 1);
+  s_apiKey[sizeof(s_apiKey) - 1] = '\0';
+  DBG_INFO("API key: %s", hasApiKey() ? "saved" : "cleared");
   return true;
 }
