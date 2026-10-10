@@ -54,14 +54,17 @@ retrying fixes it.
 
 ## Tests owed
 
-Smoke-tested only. Run these on the next real work on this project, or before
-the next release, and tick them off with date and board MAC.
+All cleared 10-10-2026. Re-run the RUNBOOK 5b matrix when the partition
+table, platform, WiFi/Improv/`loop()` timing, board envs or NVS keys change.
 
 - [x] Case 1 – fresh install, erased (only board env) – 10-10-2026, `b0:cb:d8:da:ae:8c`
 - [x] Case 2 – Update on a provisioned board – 10-10-2026, `b0:cb:d8:da:ae:8c`:
   live page offered Update from `0.4.0-dev`, no erase; booted `v0.4.0` from
   `app0` with stops, settings, API key and WiFi kept
-- [ ] Case 3 – Update from `app1` after ArduinoOTA
+- [x] Case 3 – Update from `app1` – 10-10-2026, `b0:cb:d8:da:ae:8c`: ArduinoOTA
+  of a local `0.5.0-dev` build → `Running from app1`; live page offered Update
+  to `0.4.0`; booted `v0.4.0` from `app0` with stops, settings, API key and
+  WiFi kept
 
 Cases 4 (wrong board) and 5 (web `/update`) don't apply: one env, and no web
 update page.

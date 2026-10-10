@@ -55,5 +55,5 @@ resets saved stops to the new defaults on next boot.
 - `improvTick()` must run at least every ~1 s: it is called in `loop()`, the
   portal loop, the inter-stop gap and `DeChunkStream::_timedRead()`. Keep it
   there when touching the fetch code.
-- Before the next release, clear *Tests owed* in `docs/WEB_INSTALLER.md`
-  (RUNBOOK 5b).
+- Re-run the RUNBOOK 5b matrix (record in `docs/WEB_INSTALLER.md`) when
+  partitions, platform, WiFi/Improv/`loop()` timing, envs or NVS keys change.
